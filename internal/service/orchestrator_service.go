@@ -112,6 +112,10 @@ func (o *OrchestratorService) handlePaused(ctx context.Context, phone *domain.Ph
 	}
 	phone.RecoveryInProgress = true
 	_ = o.store.Update(ctx, *phone)
+	defer func() {
+		phone.RecoveryInProgress = false
+		_ = o.store.Update(ctx, *phone)
+	}()
 
 	scenario := phone.LastError
 	if scenario == "" {
@@ -119,7 +123,6 @@ func (o *OrchestratorService) handlePaused(ctx context.Context, phone *domain.Ph
 	}
 
 	plan, err := o.recovery.RunRecovery(ctx, phone.Serial, scenario, scenario)
-	phone.RecoveryInProgress = false
 	if err != nil {
 		phone.LastError = err.Error()
 		_ = o.store.Update(ctx, *phone)

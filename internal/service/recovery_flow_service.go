@@ -44,11 +44,12 @@ func (s *RecoveryFlowService) RunRecovery(ctx context.Context, serial, scenario,
 	}
 
 	resp, err := s.recovery.Solve(ctx, domain.RecoverySolveRequest{
-		Serial:        serial,
-		XMLDump:       ui.XMLDump,
-		ScreenshotKey: screen.MinioKey,
-		Scenario:      scenario,
-		Context:       contextHint,
+		Serial:         serial,
+		XMLDump:        ui.XMLDump,
+		ScreenshotKey:  screen.MinioKey,
+		ScreenshotURL:  screen.ScreenshotURL,
+		Scenario:       scenario,
+		Context:        contextHint,
 	})
 	if err != nil {
 		return domain.RecoveryPlan{}, err
@@ -64,7 +65,7 @@ func (s *RecoveryFlowService) RunRecovery(ctx context.Context, serial, scenario,
 		ErrorHash:  resp.ErrorHash,
 		ScenarioID: resp.ScenarioID,
 		Source:     resp.Source,
-		Steps:      resp.Solution,
+		Steps:      refineTapStepsFromXML(resp.Solution, ui.XMLDump),
 		Message:    resp.Message,
 	}
 
@@ -72,15 +73,39 @@ func (s *RecoveryFlowService) RunRecovery(ctx context.Context, serial, scenario,
 		return plan, domain.ErrExecutorUnavailable
 	}
 
+	// Дополнительные tap по Allow, если permission-диалог остался (часто 2 шага подряд).
+	for i := 0; i < 3; i++ {
+		afterUI, err := s.observer.DumpUI(ctx, serial)
+		if err != nil || !isPermissionDialog(afterUI.XMLDump) {
+			break
+		}
+		steps := refineTapStepsFromXML([]domain.SolutionStep{{Type: "tap"}}, afterUI.XMLDump)
+		if len(steps) == 0 || steps[0].X == 0 && steps[0].Y == 0 {
+			break
+		}
+		if err := s.executor.ExecutePlan(ctx, serial, steps); err != nil {
+			break
+		}
+	}
+
 	// Проверка результата (сценарий 3, шаг 10) и отчёт в recovery (шаг 11).
 	after, err := s.observer.CaptureScreen(ctx, serial)
-	success := err == nil
+	afterUI, uiErr := s.observer.DumpUI(ctx, serial)
+	success := err == nil && (uiErr != nil || !isPermissionDialog(afterUI.XMLDump))
 	if success && plan.ErrorHash != "" {
 		_ = s.recovery.ReportOutcome(ctx, domain.RecoveryOutcomeRequest{
 			ErrorHash:              plan.ErrorHash,
 			Serial:                 serial,
 			Success:                true,
 			ScreenshotKey:          after.MinioKey,
+			PreviousScreenshotHash: "",
+		})
+	} else if !success && plan.ErrorHash != "" {
+		_ = s.recovery.ReportOutcome(ctx, domain.RecoveryOutcomeRequest{
+			ErrorHash:              plan.ErrorHash,
+			Serial:                 serial,
+			Success:                false,
+			ScreenshotKey:          "",
 			PreviousScreenshotHash: "",
 		})
 	}

@@ -1,22 +1,27 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/mobilefarm/af/phone-orchestrator/internal/domain"
+	"github.com/mobilefarm/af/phone-orchestrator/internal/port"
 	"github.com/mobilefarm/af/phone-orchestrator/internal/service"
 )
 
 type PhonesHTTP struct {
 	phones       *service.PhoneService
 	orchestrator *service.OrchestratorService
+	observer     port.ObserverClient
+	executor     port.ExecutorClient
 }
 
-func NewPhonesHTTP(phones *service.PhoneService, orchestrator *service.OrchestratorService) *PhonesHTTP {
-	return &PhonesHTTP{phones: phones, orchestrator: orchestrator}
+func NewPhonesHTTP(phones *service.PhoneService, orchestrator *service.OrchestratorService, observer port.ObserverClient, executor port.ExecutorClient) *PhonesHTTP {
+	return &PhonesHTTP{phones: phones, orchestrator: orchestrator, observer: observer, executor: executor}
 }
 
 func (h *PhonesHTTP) Register(mux *http.ServeMux) {
@@ -138,6 +143,42 @@ func (h *PhonesHTTP) phoneBySerial(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			writeJSON(w, http.StatusOK, map[string]string{"status": "new"})
+		case "screen":
+			if r.Method != http.MethodGet {
+				http.Error(w, "только GET", http.StatusMethodNotAllowed)
+				return
+			}
+			h.captureScreen(w, r, serial)
+		case "ui":
+			if r.Method != http.MethodGet {
+				http.Error(w, "только GET", http.StatusMethodNotAllowed)
+				return
+			}
+			h.dumpUI(w, r, serial)
+		case "observe":
+			if r.Method != http.MethodGet {
+				http.Error(w, "только GET", http.StatusMethodNotAllowed)
+				return
+			}
+			h.observe(w, r, serial)
+		case "tap":
+			if r.Method != http.MethodPost {
+				http.Error(w, "только POST", http.StatusMethodNotAllowed)
+				return
+			}
+			h.executorTap(w, r, serial)
+		case "swipe":
+			if r.Method != http.MethodPost {
+				http.Error(w, "только POST", http.StatusMethodNotAllowed)
+				return
+			}
+			h.executorSwipe(w, r, serial)
+		case "key":
+			if r.Method != http.MethodPost {
+				http.Error(w, "только POST", http.StatusMethodNotAllowed)
+				return
+			}
+			h.executorKey(w, r, serial)
 		default:
 			http.NotFound(w, r)
 		}
@@ -160,22 +201,26 @@ func (h *PhonesHTTP) stats(w http.ResponseWriter, r *http.Request) {
 }
 
 type phoneJSON struct {
-	Serial               string  `json:"serial"`
-	State                string  `json:"state"`
-	Model                string  `json:"model,omitempty"`
-	AndroidVersion       string  `json:"android_version,omitempty"`
-	IP                   string  `json:"ip,omitempty"`
-	LastHeartbeat        string  `json:"last_heartbeat,omitempty"`
-	Error                string  `json:"error,omitempty"`
-	RecoveryInProgress     bool    `json:"recovery_in_progress,omitempty"`
-	UptimeHours          float64 `json:"uptime_hours,omitempty"`
+	Serial             string  `json:"serial"`
+	State              string  `json:"state"`
+	Model              string  `json:"model,omitempty"`
+	AndroidVersion     string  `json:"android_version,omitempty"`
+	IP                 string  `json:"ip,omitempty"`
+	LastHeartbeat      string  `json:"last_heartbeat,omitempty"`
+	HeartbeatCount     int     `json:"heartbeat_count,omitempty"`
+	Error              string  `json:"error,omitempty"`
+	LastErrorHash      string  `json:"last_error_hash,omitempty"`
+	RecoveryInProgress bool    `json:"recovery_in_progress,omitempty"`
+	UptimeHours        float64 `json:"uptime_hours,omitempty"`
 }
 
 func toPhoneJSON(p domain.Phone) phoneJSON {
 	j := phoneJSON{
 		Serial: p.Serial, State: string(p.State), Model: p.Model,
 		AndroidVersion: p.AndroidVersion, IP: p.CurrentIP,
-		Error: p.LastError, RecoveryInProgress: p.RecoveryInProgress,
+		Error: p.LastError, LastErrorHash: p.LastErrorHash,
+		RecoveryInProgress: p.RecoveryInProgress,
+		HeartbeatCount:     p.HeartbeatCount,
 	}
 	if p.LastHeartbeat != nil {
 		j.LastHeartbeat = p.LastHeartbeat.UTC().Format(time.RFC3339)
@@ -184,4 +229,166 @@ func toPhoneJSON(p domain.Phone) phoneJSON {
 		j.UptimeHours = time.Since(*p.ReadyAt).Hours()
 	}
 	return j
+}
+
+func (h *PhonesHTTP) captureScreen(w http.ResponseWriter, r *http.Request, serial string) {
+	if h.observer == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "observer не настроен"})
+		return
+	}
+	timeout := observerTimeout(r, 30)
+	ctx, cancel := context.WithTimeout(r.Context(), timeout)
+	defer cancel()
+
+	screen, err := h.observer.CaptureScreen(ctx, serial)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"serial":         screen.Serial,
+		"minio_key":      screen.MinioKey,
+		"screenshot_url": screen.ScreenshotURL,
+		"resolution": map[string]int{
+			"width":  screen.Width,
+			"height": screen.Height,
+		},
+	})
+}
+
+func (h *PhonesHTTP) dumpUI(w http.ResponseWriter, r *http.Request, serial string) {
+	if h.observer == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "observer не настроен"})
+		return
+	}
+	timeout := observerTimeout(r, 30)
+	ctx, cancel := context.WithTimeout(r.Context(), timeout)
+	defer cancel()
+
+	ui, err := h.observer.DumpUI(ctx, serial)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"serial":       ui.Serial,
+		"package_name": ui.Package,
+		"xml_dump":     ui.XMLDump,
+	})
+}
+
+func (h *PhonesHTTP) observe(w http.ResponseWriter, r *http.Request, serial string) {
+	if h.observer == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "observer не настроен"})
+		return
+	}
+	timeout := observerTimeout(r, 60)
+	ctx, cancel := context.WithTimeout(r.Context(), timeout)
+	defer cancel()
+
+	screen, err := h.observer.CaptureScreen(ctx, serial)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	ui, err := h.observer.DumpUI(ctx, serial)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"serial":         screen.Serial,
+		"minio_key":      screen.MinioKey,
+		"screenshot_url": screen.ScreenshotURL,
+		"resolution": map[string]int{
+			"width":  screen.Width,
+			"height": screen.Height,
+		},
+		"package_name": ui.Package,
+		"xml_dump":     ui.XMLDump,
+	})
+}
+
+func observerTimeout(r *http.Request, defaultSec int) time.Duration {
+	timeout := time.Duration(defaultSec) * time.Second
+	if raw := r.URL.Query().Get("timeout_sec"); raw != "" {
+		if sec, err := strconv.Atoi(raw); err == nil && sec > 0 {
+			timeout = time.Duration(sec) * time.Second
+		}
+	}
+	return timeout
+}
+
+func (h *PhonesHTTP) executorTap(w http.ResponseWriter, r *http.Request, serial string) {
+	if h.executor == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "executor не настроен"})
+		return
+	}
+	var body struct {
+		X int32 `json:"x"`
+		Y int32 `json:"y"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.X <= 0 || body.Y <= 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "укажите x и y в JSON"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	res, err := h.executor.Tap(ctx, serial, body.X, body.Y)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"serial": serial, "result": res})
+}
+
+func (h *PhonesHTTP) executorSwipe(w http.ResponseWriter, r *http.Request, serial string) {
+	if h.executor == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "executor не настроен"})
+		return
+	}
+	var body struct {
+		X0 int32 `json:"x0"`
+		Y0 int32 `json:"y0"`
+		X1 int32 `json:"x1"`
+		Y1 int32 `json:"y1"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "укажите x0,y0,x1,y1 в JSON"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	res, err := h.executor.Swipe(ctx, serial, body.X0, body.Y0, body.X1, body.Y1)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"serial": serial, "result": res})
+}
+
+func (h *PhonesHTTP) executorKey(w http.ResponseWriter, r *http.Request, serial string) {
+	if h.executor == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "executor не настроен"})
+		return
+	}
+	var body struct {
+		Key string `json:"key"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Key == "" {
+		key := r.URL.Query().Get("key")
+		if key == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "укажите key в JSON или query"})
+			return
+		}
+		body.Key = key
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	res, err := h.executor.Key(ctx, serial, body.Key)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"serial": serial, "result": res})
 }

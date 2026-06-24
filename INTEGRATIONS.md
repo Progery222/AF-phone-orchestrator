@@ -20,9 +20,17 @@
 }
 ```
 
-`screenshot_key` = `minio_key` из observer (`GET /screen/{serial}`).
+`screenshot_key` = `minio_key` из ответа orchestrator (`GET /phones/{serial}/screen`) или observer (`GET /screen/{serial}`).
 
-## Observer (HTTP)
+## Orchestrator (HTTP)
+
+| Endpoint | Данные |
+|----------|--------|
+| `GET /phones/{serial}/screen?timeout_sec=30` | прокси к observer: `minio_key`, `screenshot_url`, resolution |
+
+Клиент **не** обращается к observer напрямую — только через orchestrator.
+
+## Observer (HTTP, внутренний)
 
 | Endpoint | Данные |
 |----------|--------|
@@ -31,9 +39,18 @@
 
 Env: `OBSERVER_HTTP_URL` (dev: `http://127.0.0.1:19090`).
 
-## Executor
+## Executor (gRPC)
 
-Пока **stub** — план логируется, жесты не выполняются. Целевой транспорт: gRPC `:50051`.
+Реальный транспорт: gRPC `EXECUTOR_GRPC_ADDR` (по умолчанию `localhost:50051`).
+
+| Метод | Назначение |
+|-------|------------|
+| `Execute` | batch плана recovery (tap + wait) |
+| `Tap` | прямой tap из `POST /phones/{serial}/tap` |
+
+`EXECUTOR_MODE=stub` — только для локальной отладки без телефона.
+
+Перед выполнением orchestrator **refine** координат tap из `permission_allow_button` в XML.
 
 ## Connector
 

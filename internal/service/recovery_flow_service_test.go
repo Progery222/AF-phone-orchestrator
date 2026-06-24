@@ -51,7 +51,16 @@ func (stubRecovery) Ping(context.Context) error                                 
 type stubExecutor struct{}
 
 func (stubExecutor) ExecutePlan(context.Context, string, []domain.SolutionStep) error { return nil }
-func (stubExecutor) Ping(context.Context) error                                       { return nil }
+func (stubExecutor) Tap(context.Context, string, int32, int32) (domain.ExecutorActionResult, error) {
+	return domain.ExecutorActionResult{Action: "tap", Status: "ok"}, nil
+}
+func (stubExecutor) Swipe(context.Context, string, int32, int32, int32, int32) (domain.ExecutorActionResult, error) {
+	return domain.ExecutorActionResult{Action: "swipe", Status: "ok"}, nil
+}
+func (stubExecutor) Key(context.Context, string, string) (domain.ExecutorActionResult, error) {
+	return domain.ExecutorActionResult{Action: "key", Status: "ok"}, nil
+}
+func (stubExecutor) Ping(context.Context) error { return nil }
 
 type nopLogger struct{}
 

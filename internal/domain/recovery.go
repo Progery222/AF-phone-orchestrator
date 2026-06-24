@@ -15,11 +15,12 @@ type UIDump struct {
 }
 
 type RecoverySolveRequest struct {
-	Serial        string `json:"serial"`
-	XMLDump       string `json:"xml_dump"`
-	ScreenshotKey string `json:"screenshot_key"`
-	Scenario      string `json:"scenario,omitempty"`
-	Context       string `json:"context,omitempty"`
+	Serial         string `json:"serial"`
+	XMLDump        string `json:"xml_dump"`
+	ScreenshotKey  string `json:"screenshot_key"`
+	ScreenshotURL  string `json:"screenshot_url,omitempty"`
+	Scenario       string `json:"scenario,omitempty"`
+	Context        string `json:"context,omitempty"`
 }
 
 type RecoverySolveResponse struct {

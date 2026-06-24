@@ -24,3 +24,6 @@ proto:
 
 docker-build:
 	docker build -f deploy/Dockerfile -t af-phone-orchestrator:latest .
+
+e2e:
+	powershell -ExecutionPolicy Bypass -File scripts/run-e2e-bundle.ps1

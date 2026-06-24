@@ -5,3 +5,6 @@ bin/
 .vscode/
 gen/
 .tz_v4_extract.txt
+Farm/
+minio-data/
+minio-data-fresh/

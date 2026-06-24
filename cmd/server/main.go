@@ -37,7 +37,8 @@ func main() {
 	observer := openObserver(cfg, logger)
 	connector := driver.NewStubConnector()
 	provision := driver.NewStubProvisioner()
-	executor := driver.NewStubExecutor()
+	executor, closeExecutor := openExecutor(cfg, logger)
+	defer closeExecutor()
 
 	recovery, closeRecovery := openRecovery(cfg, logger)
 	defer closeRecovery()
@@ -54,7 +55,7 @@ func main() {
 	phones := service.NewPhoneService(store)
 
 	orchHandler := handler.NewOrchestratorHandler(flow, logger)
-	phonesHTTP := handler.NewPhonesHTTP(phones, orch)
+	phonesHTTP := handler.NewPhonesHTTP(phones, orch, observer, executor)
 
 	grpcServer := grpc.NewServer()
 	orchHandler.Register(grpcServer)
@@ -99,6 +100,19 @@ func openObserver(cfg config.Config, log *slog.Logger) port.ObserverClient {
 		return driver.NewStubObserver()
 	}
 	return driver.NewObserverHTTP(cfg)
+}
+
+func openExecutor(cfg config.Config, log *slog.Logger) (port.ExecutorClient, func()) {
+	if strings.EqualFold(os.Getenv("EXECUTOR_MODE"), "stub") {
+		log.Warn("executor stub mode")
+		return driver.NewStubExecutor(), func() {}
+	}
+	ex, cleanup, err := driver.NewExecutorGRPC(cfg)
+	if err != nil {
+		log.Warn("executor grpc unavailable, using stub", "error", err)
+		return driver.NewStubExecutor(), func() {}
+	}
+	return ex, cleanup
 }
 
 func openStore(ctx context.Context, cfg config.Config, log *slog.Logger) (port.PhoneStore, func(), error) {
