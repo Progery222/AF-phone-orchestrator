@@ -4,3 +4,4 @@ bin/
 .idea/
 .vscode/
 gen/
+.tz_v4_extract.txt

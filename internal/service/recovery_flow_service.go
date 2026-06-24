@@ -72,7 +72,20 @@ func (s *RecoveryFlowService) RunRecovery(ctx context.Context, serial, scenario,
 		return plan, domain.ErrExecutorUnavailable
 	}
 
-	s.log.Info("recovery flow completed", "service", "phone-orchestrator", "serial", serial, "source", plan.Source)
+	// Проверка результата (сценарий 3, шаг 10) и отчёт в recovery (шаг 11).
+	after, err := s.observer.CaptureScreen(ctx, serial)
+	success := err == nil
+	if success && plan.ErrorHash != "" {
+		_ = s.recovery.ReportOutcome(ctx, domain.RecoveryOutcomeRequest{
+			ErrorHash:              plan.ErrorHash,
+			Serial:                 serial,
+			Success:                true,
+			ScreenshotKey:          after.MinioKey,
+			PreviousScreenshotHash: "",
+		})
+	}
+
+	s.log.Info("recovery flow completed", "service", "phone-orchestrator", "serial", serial, "source", plan.Source, "success", success)
 	return plan, nil
 }
 

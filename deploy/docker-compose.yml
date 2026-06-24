@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: orchestrator
+      POSTGRES_PASSWORD: orchestrator
+      POSTGRES_DB: orchestrator
+    ports:
+      - "5434:5432"
+    volumes:
+      - orchestrator_pgdata:/var/lib/postgresql/data
+      - ../migrations/001_phones.up.sql:/docker-entrypoint-initdb.d/001_phones.up.sql:ro
+
+volumes:
+  orchestrator_pgdata:
