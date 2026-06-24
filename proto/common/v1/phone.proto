@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package af.common.v1;
+
+option go_package = "github.com/mobilefarm/af/phone-orchestrator/gen/common/v1;commonv1";
+
+message PhoneRef {
+  string serial = 1;
+}
+
+enum PhoneState {
+  PHONE_STATE_UNSPECIFIED = 0;
+  PHONE_STATE_IDLE = 1;
+  PHONE_STATE_BUSY = 2;
+  PHONE_STATE_ERROR = 3;
+}

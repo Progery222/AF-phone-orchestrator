@@ -1,0 +1,8 @@
+# AF-phone-orchestrator — правила Cursor
+
+- Go 1.22+, hexagonal, репозиторий Progery222/AF-phone-orchestrator
+- gRPC :50050, HTTP health :9090
+- NATS к recovery-engine, HTTP к observer
+- GitHub Flow, Conventional Commits, не пушить в main
+
+Полная документация: CLAUDE.md, AGENTS.md

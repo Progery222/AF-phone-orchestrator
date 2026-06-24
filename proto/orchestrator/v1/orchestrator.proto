@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package af.orchestrator.v1;
+
+option go_package = "github.com/mobilefarm/af/phone-orchestrator/gen/orchestrator/v1;orchestratorv1";
+
+service OrchestratorService {
+  rpc RunRecovery(RunRecoveryRequest) returns (RunRecoveryResponse);
+  rpc ReportRecoveryOutcome(ReportRecoveryOutcomeRequest) returns (ReportRecoveryOutcomeResponse);
+}
+
+message RunRecoveryRequest {
+  string serial = 1;
+  string scenario = 2;
+  string context = 3;
+}
+
+message RunRecoveryResponse {
+  bool success = 1;
+  string message = 2;
+  string error_hash = 3;
+  string scenario_id = 4;
+  string source = 5;
+  repeated RecoveryStep steps = 6;
+}
+
+message ReportRecoveryOutcomeRequest {
+  string serial = 1;
+  string error_hash = 2;
+  bool success = 3;
+  string screenshot_key = 4;
+  string previous_screenshot_hash = 5;
+}
+
+message ReportRecoveryOutcomeResponse {
+  bool accepted = 1;
+  string message = 2;
+}
+
+message RecoveryStep {
+  string action = 1;
+  string target = 2;
+  map<string, string> params = 3;
+}

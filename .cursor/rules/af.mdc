@@ -1,0 +1,13 @@
+---
+description: AF-phone-orchestrator
+globs:
+alwaysApply: true
+---
+
+# AF-phone-orchestrator
+
+Координатор Android Farm. Observer HTTP + Recovery NATS + Executor stub.
+
+Hexagonal: domain → port → service → adapter.
+
+Не дублировать логику recovery/observer/executor.
