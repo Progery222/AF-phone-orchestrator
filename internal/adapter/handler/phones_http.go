@@ -203,6 +203,7 @@ func (h *PhonesHTTP) stats(w http.ResponseWriter, r *http.Request) {
 type phoneJSON struct {
 	Serial             string  `json:"serial"`
 	State              string  `json:"state"`
+	PlatformUserID     string  `json:"platform_user_id,omitempty"`
 	Model              string  `json:"model,omitempty"`
 	AndroidVersion     string  `json:"android_version,omitempty"`
 	IP                 string  `json:"ip,omitempty"`
@@ -216,7 +217,7 @@ type phoneJSON struct {
 
 func toPhoneJSON(p domain.Phone) phoneJSON {
 	j := phoneJSON{
-		Serial: p.Serial, State: string(p.State), Model: p.Model,
+		Serial: p.Serial, State: string(p.State), PlatformUserID: p.PlatformUserID, Model: p.Model,
 		AndroidVersion: p.AndroidVersion, IP: p.CurrentIP,
 		Error: p.LastError, LastErrorHash: p.LastErrorHash,
 		RecoveryInProgress: p.RecoveryInProgress,

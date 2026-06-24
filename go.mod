@@ -5,12 +5,15 @@ go 1.25.0
 require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/mobilefarm/af/phone-action-executor v0.0.0
+	github.com/mobilefarm/af/phone-connector v0.0.0
 	github.com/nats-io/nats-server/v2 v2.10.24
 	github.com/nats-io/nats.go v1.37.0
 	google.golang.org/grpc v1.69.2
 )
 
 replace github.com/mobilefarm/af/phone-action-executor => ../AF-phone-action-executor
+
+replace github.com/mobilefarm/af/phone-connector => ../AF-phone-connector
 
 require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect
@@ -24,7 +27,7 @@ require (
 	golang.org/x/crypto v0.31.0 // indirect
 	golang.org/x/net v0.30.0 // indirect
 	golang.org/x/sync v0.17.0 // indirect
-	golang.org/x/sys v0.28.0 // indirect
+	golang.org/x/sys v0.30.0 // indirect
 	golang.org/x/text v0.29.0 // indirect
 	golang.org/x/time v0.8.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241015192408-796eee8c2d53 // indirect

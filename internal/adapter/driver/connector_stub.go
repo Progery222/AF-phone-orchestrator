@@ -30,7 +30,7 @@ type StubProvisioner struct{}
 
 func NewStubProvisioner() *StubProvisioner { return &StubProvisioner{} }
 
-func (s *StubProvisioner) AdvanceSetup(_ context.Context, phone domain.Phone) (domain.PhoneState, error) {
+func (s *StubProvisioner) AdvanceSetup(_ context.Context, phone *domain.Phone) (domain.PhoneState, error) {
 	switch phone.State {
 	case domain.StateWifiSetup:
 		return domain.StateProxySetup, nil

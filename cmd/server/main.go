@@ -35,8 +35,8 @@ func main() {
 	defer cleanupStore()
 
 	observer := openObserver(cfg, logger)
-	connector := driver.NewStubConnector()
-	provision := driver.NewStubProvisioner()
+	connector, provision, closeConnector := openConnector(cfg, logger)
+	defer closeConnector()
 	executor, closeExecutor := openExecutor(cfg, logger)
 	defer closeExecutor()
 
@@ -100,6 +100,20 @@ func openObserver(cfg config.Config, log *slog.Logger) port.ObserverClient {
 		return driver.NewStubObserver()
 	}
 	return driver.NewObserverHTTP(cfg)
+}
+
+func openConnector(cfg config.Config, log *slog.Logger) (port.ConnectorClient, port.ProvisionClient, func()) {
+	if strings.EqualFold(os.Getenv("CONNECTOR_MODE"), "stub") {
+		log.Warn("connector stub mode")
+		return driver.NewStubConnector(), driver.NewStubProvisioner(), func() {}
+	}
+	c, cleanup, err := driver.NewConnectorGRPC(cfg)
+	if err != nil {
+		log.Warn("connector grpc unavailable, using stub", "error", err)
+		return driver.NewStubConnector(), driver.NewStubProvisioner(), func() {}
+	}
+	log.Info("connector grpc enabled", "addr", cfg.ConnectorGRPCAddr)
+	return c, c, cleanup
 }
 
 func openExecutor(cfg config.Config, log *slog.Logger) (port.ExecutorClient, func()) {
