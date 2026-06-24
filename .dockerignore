@@ -1,0 +1,11 @@
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+.worktrees
+worktrees
+bin
+dist
+tmp
+coverage.out
