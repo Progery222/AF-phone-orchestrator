@@ -52,26 +52,6 @@ Env: `OBSERVER_HTTP_URL` (dev: `http://127.0.0.1:19090`).
 
 Перед выполнением orchestrator **refine** координат tap из `permission_allow_button` в XML.
 
-## Connector (gRPC)
+## Connector
 
-`CONNECTOR_GRPC_ADDR` (по умолчанию `localhost:50052`). `CONNECTOR_MODE=stub` — локальная отладка без connector.
-
-| RPC | Назначение |
-|-----|------------|
-| `Connect` | ADB-сессия (FSM `new` → `wifi_setup`) |
-| `Provision` | anti-leak S1..S9 (из `wifi_setup`) |
-| `GetProvisionStatus` | опрос до `ready`, поле `platform_user_id` |
-
-После ready orchestrator сохраняет `platform_user_id` в `phones` и отдаёт в `GET /phones/{serial}` — для заголовка `X-User-ID` в AF-platform-api.
-
-`PLATFORM_API_URL` настраивается в **phone-connector** (создание аккаунта на S9).
-
-## Platform-api (HTTP)
-
-Клиенты фермы используют `platform_user_id` как `X-User-ID`:
-
-```http
-POST http://localhost:8080/posts
-X-User-ID: <platform_user_id из GET /phones/{serial}>
-```
-
+Планируется gRPC `:50052` для ADB-сессий перед сценариями.

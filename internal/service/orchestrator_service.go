@@ -85,7 +85,7 @@ func (o *OrchestratorService) processPhone(ctx context.Context, phone domain.Pho
 			o.transition(ctx, &phone, domain.StateWifiSetup, stepErr, start)
 		}
 	case domain.StateWifiSetup, domain.StateProxySetup, domain.StateAppsInstall, domain.StateAuth:
-		next, err := o.provision.AdvanceSetup(ctx, &phone)
+		next, err := o.provision.AdvanceSetup(ctx, phone)
 		if err != nil {
 			stepErr = err
 		} else if next != phone.State {
@@ -139,13 +139,8 @@ func (o *OrchestratorService) heartbeat(ctx context.Context, phone *domain.Phone
 	now := time.Now()
 	phone.LastHeartbeat = &now
 	phone.HeartbeatCount++
-	if st, err := o.connector.GetStatus(ctx, phone.Serial); err == nil {
-		if st.Model != "" {
-			phone.Model = st.Model
-		}
-		if st.PlatformUserID != "" {
-			phone.PlatformUserID = st.PlatformUserID
-		}
+	if st, err := o.connector.GetStatus(ctx, phone.Serial); err == nil && st.Model != "" {
+		phone.Model = st.Model
 	}
 	_ = o.store.Update(ctx, *phone)
 }

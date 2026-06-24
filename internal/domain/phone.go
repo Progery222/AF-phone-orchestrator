@@ -38,7 +38,6 @@ type Phone struct {
 	HeartbeatCount      int
 	RecoveryInProgress  bool
 	LastErrorHash       string
-	PlatformUserID      string // UUID аккаунта AF-platform-api (заголовок X-User-ID)
 	CreatedAt           time.Time
 	UpdatedAt           time.Time
 	ReadyAt             *time.Time

@@ -43,7 +43,7 @@ func (p *PostgresPhoneStore) ListActive(ctx context.Context) ([]domain.Phone, er
 		       COALESCE(android_version,''), COALESCE(screen_res_x,0), COALESCE(screen_res_y,0),
 		       COALESCE(current_ip,''), proxy_id, COALESCE(wifi_ssid,''), COALESCE(adb_port,5555),
 		       last_heartbeat, heartbeat_count, recovery_in_progress, COALESCE(last_error_hash,''),
-		       platform_user_id::text, created_at, updated_at, ready_at, retired_at
+		       created_at, updated_at, ready_at, retired_at
 		FROM phones WHERE state NOT IN ('retired','error')`)
 	if err != nil {
 		return nil, err
@@ -58,7 +58,7 @@ func (p *PostgresPhoneStore) ListAll(ctx context.Context) ([]domain.Phone, error
 		       COALESCE(android_version,''), COALESCE(screen_res_x,0), COALESCE(screen_res_y,0),
 		       COALESCE(current_ip,''), proxy_id, COALESCE(wifi_ssid,''), COALESCE(adb_port,5555),
 		       last_heartbeat, heartbeat_count, recovery_in_progress, COALESCE(last_error_hash,''),
-		       platform_user_id::text, created_at, updated_at, ready_at, retired_at
+		       created_at, updated_at, ready_at, retired_at
 		FROM phones ORDER BY serial`)
 	if err != nil {
 		return nil, err
@@ -73,7 +73,7 @@ func (p *PostgresPhoneStore) Get(ctx context.Context, serial string) (domain.Pho
 		       COALESCE(android_version,''), COALESCE(screen_res_x,0), COALESCE(screen_res_y,0),
 		       COALESCE(current_ip,''), proxy_id, COALESCE(wifi_ssid,''), COALESCE(adb_port,5555),
 		       last_heartbeat, heartbeat_count, recovery_in_progress, COALESCE(last_error_hash,''),
-		       platform_user_id::text, created_at, updated_at, ready_at, retired_at
+		       created_at, updated_at, ready_at, retired_at
 		FROM phones WHERE serial = $1`, serial)
 	phone, err := scanPhone(row)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -87,13 +87,13 @@ func (p *PostgresPhoneStore) Save(ctx context.Context, phone domain.Phone) error
 		INSERT INTO phones (serial, state, current_step, last_error, model, android_version,
 			screen_res_x, screen_res_y, current_ip, proxy_id, wifi_ssid, adb_port,
 			last_heartbeat, heartbeat_count, recovery_in_progress, last_error_hash,
-			platform_user_id, created_at, updated_at, ready_at, retired_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
+			created_at, updated_at, ready_at, retired_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
 		phone.Serial, string(phone.State), phone.CurrentStep, nullText(phone.LastError),
 		nullText(phone.Model), nullText(phone.AndroidVersion), nullInt(phone.ScreenResX), nullInt(phone.ScreenResY),
 		nullText(phone.CurrentIP), phone.ProxyID, nullText(phone.WifiSSID), phone.AdbPort,
 		phone.LastHeartbeat, phone.HeartbeatCount, phone.RecoveryInProgress, nullText(phone.LastErrorHash),
-		nullUUID(phone.PlatformUserID), phone.CreatedAt, phone.UpdatedAt, phone.ReadyAt, phone.RetiredAt,
+		phone.CreatedAt, phone.UpdatedAt, phone.ReadyAt, phone.RetiredAt,
 	)
 	return err
 }
@@ -104,13 +104,13 @@ func (p *PostgresPhoneStore) Update(ctx context.Context, phone domain.Phone) err
 		UPDATE phones SET state=$2, current_step=$3, last_error=$4, model=$5, android_version=$6,
 			screen_res_x=$7, screen_res_y=$8, current_ip=$9, proxy_id=$10, wifi_ssid=$11, adb_port=$12,
 			last_heartbeat=$13, heartbeat_count=$14, recovery_in_progress=$15, last_error_hash=$16,
-			platform_user_id=$17, updated_at=$18, ready_at=$19, retired_at=$20
+			updated_at=$17, ready_at=$18, retired_at=$19
 		WHERE serial=$1`,
 		phone.Serial, string(phone.State), phone.CurrentStep, nullText(phone.LastError),
 		nullText(phone.Model), nullText(phone.AndroidVersion), nullInt(phone.ScreenResX), nullInt(phone.ScreenResY),
 		nullText(phone.CurrentIP), phone.ProxyID, nullText(phone.WifiSSID), phone.AdbPort,
 		phone.LastHeartbeat, phone.HeartbeatCount, phone.RecoveryInProgress, nullText(phone.LastErrorHash),
-		nullUUID(phone.PlatformUserID), phone.UpdatedAt, phone.ReadyAt, phone.RetiredAt,
+		phone.UpdatedAt, phone.ReadyAt, phone.RetiredAt,
 	)
 	if err != nil {
 		return err
@@ -163,13 +163,13 @@ type pgxRow interface {
 func scanPhone(row pgxRow) (domain.Phone, error) {
 	var phone domain.Phone
 	var state string
-	var lastError, model, android, ip, ssid, hash, platformUserID string
+	var lastError, model, android, ip, ssid, hash string
 	var proxyID *int
 	var lastHB, readyAt, retiredAt *time.Time
 	err := row.Scan(
 		&phone.Serial, &state, &phone.CurrentStep, &lastError, &model, &android,
 		&phone.ScreenResX, &phone.ScreenResY, &ip, &proxyID, &ssid, &phone.AdbPort,
-		&lastHB, &phone.HeartbeatCount, &phone.RecoveryInProgress, &hash, &platformUserID,
+		&lastHB, &phone.HeartbeatCount, &phone.RecoveryInProgress, &hash,
 		&phone.CreatedAt, &phone.UpdatedAt, &readyAt, &retiredAt,
 	)
 	if err != nil {
@@ -183,7 +183,6 @@ func scanPhone(row pgxRow) (domain.Phone, error) {
 	phone.ProxyID = proxyID
 	phone.WifiSSID = ssid
 	phone.LastErrorHash = hash
-	phone.PlatformUserID = platformUserID
 	phone.LastHeartbeat = lastHB
 	phone.ReadyAt = readyAt
 	phone.RetiredAt = retiredAt
@@ -214,11 +213,4 @@ func nullInt(n int) any {
 		return nil
 	}
 	return n
-}
-
-func nullUUID(s string) any {
-	if s == "" {
-		return nil
-	}
-	return s
 }

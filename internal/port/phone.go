@@ -30,7 +30,7 @@ type ConnectorClient interface {
 }
 
 type ProvisionClient interface {
-	AdvanceSetup(ctx context.Context, phone *domain.Phone) (domain.PhoneState, error)
+	AdvanceSetup(ctx context.Context, phone domain.Phone) (domain.PhoneState, error)
 	Ping(ctx context.Context) error
 }
 
