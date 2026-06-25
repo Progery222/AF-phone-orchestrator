@@ -17,7 +17,7 @@ func NewPhoneService(store port.PhoneStore) *PhoneService {
 }
 
 func (s *PhoneService) ListPhones(ctx context.Context) ([]domain.Phone, domain.PhoneStats, error) {
-	phones, err := s.store.ListAll(ctx)
+	phones, err := s.store.ListActive(ctx)
 	if err != nil {
 		return nil, domain.PhoneStats{}, err
 	}
