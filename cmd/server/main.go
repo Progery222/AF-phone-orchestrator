@@ -35,8 +35,9 @@ func main() {
 	defer cleanupStore()
 
 	observer := openObserver(cfg, logger)
-	connector := driver.NewStubConnector()
-	provision := driver.NewStubProvisioner()
+	connector, closeConnector := openConnector(cfg, logger)
+	defer closeConnector()
+	provision := openProvisioner(cfg, logger)
 	executor, closeExecutor := openExecutor(cfg, logger)
 	defer closeExecutor()
 
@@ -55,13 +56,13 @@ func main() {
 	phones := service.NewPhoneService(store)
 
 	orchHandler := handler.NewOrchestratorHandler(flow, logger)
-	phonesHTTP := handler.NewPhonesHTTP(phones, orch, observer, executor)
+	phonesHTTP := handler.NewPhonesHTTP(phones, orch, connector, observer, executor)
 
 	grpcServer := grpc.NewServer()
 	orchHandler.Register(grpcServer)
 
 	mux := handler.NewHealthHandler(handler.HealthDeps{
-		Observer: observer, Recovery: recovery, Executor: executor,
+		Observer: observer, Recovery: recovery, Executor: executor, Provisioner: provision,
 	}).Routes()
 	phonesHTTP.Register(mux)
 	mux.HandleFunc("/recovery/run", orchHandler.RunRecoveryHTTP)
@@ -92,6 +93,33 @@ func main() {
 	defer cancel()
 	grpcServer.GracefulStop()
 	_ = healthServer.Shutdown(shutdownCtx)
+}
+
+func openConnector(cfg config.Config, log *slog.Logger) (port.ConnectorClient, func()) {
+	if mode := os.Getenv("CONNECTOR_MODE"); mode == "" || strings.EqualFold(mode, "stub") {
+		log.Warn("connector stub mode")
+		return driver.NewStubConnector(), func() {}
+	}
+	conn, cleanup, err := driver.NewConnectorGRPC(cfg)
+	if err != nil {
+		log.Warn("connector grpc unavailable, using stub", "error", err)
+		return driver.NewStubConnector(), func() {}
+	}
+	log.Info("connector grpc client", "addr", cfg.ConnectorGRPCAddr)
+	return conn, cleanup
+}
+
+func openProvisioner(cfg config.Config, log *slog.Logger) port.ProvisionClient {
+	if mode := os.Getenv("PROVISIONER_MODE"); mode == "" || strings.EqualFold(mode, "stub") {
+		log.Warn("provisioner stub mode")
+		return driver.NewStubProvisioner()
+	}
+	if cfg.ProvisionerHTTPURL == "" {
+		log.Warn("PROVISIONER_HTTP_URL пуст, provisioner stub")
+		return driver.NewStubProvisioner()
+	}
+	log.Info("provisioner http client", "url", cfg.ProvisionerHTTPURL)
+	return driver.NewProvisionHTTP(cfg)
 }
 
 func openObserver(cfg config.Config, log *slog.Logger) port.ObserverClient {

@@ -16,12 +16,13 @@ import (
 type PhonesHTTP struct {
 	phones       *service.PhoneService
 	orchestrator *service.OrchestratorService
+	connector    port.ConnectorClient
 	observer     port.ObserverClient
 	executor     port.ExecutorClient
 }
 
-func NewPhonesHTTP(phones *service.PhoneService, orchestrator *service.OrchestratorService, observer port.ObserverClient, executor port.ExecutorClient) *PhonesHTTP {
-	return &PhonesHTTP{phones: phones, orchestrator: orchestrator, observer: observer, executor: executor}
+func NewPhonesHTTP(phones *service.PhoneService, orchestrator *service.OrchestratorService, connector port.ConnectorClient, observer port.ObserverClient, executor port.ExecutorClient) *PhonesHTTP {
+	return &PhonesHTTP{phones: phones, orchestrator: orchestrator, connector: connector, observer: observer, executor: executor}
 }
 
 func (h *PhonesHTTP) Register(mux *http.ServeMux) {
@@ -51,14 +52,12 @@ func (h *PhonesHTTP) listOrAdd(w http.ResponseWriter, r *http.Request) {
 			},
 		})
 	case http.MethodPost:
-		var body struct {
-			Serial string `json:"serial"`
-		}
+		var body domain.AddPhoneRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Serial == "" {
 			http.Error(w, "укажите serial в JSON", http.StatusBadRequest)
 			return
 		}
-		phone, err := h.phones.AddPhone(r.Context(), body.Serial)
+		phone, err := h.phones.AddPhone(r.Context(), body)
 		if err != nil {
 			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 			return
@@ -93,7 +92,7 @@ func (h *PhonesHTTP) phoneBySerial(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "только POST", http.StatusMethodNotAllowed)
 				return
 			}
-			phone, err := h.phones.AddPhone(r.Context(), serial)
+			phone, err := h.phones.AddPhone(r.Context(), domain.AddPhoneRequest{Serial: serial})
 			if err != nil {
 				writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 				return
@@ -179,6 +178,12 @@ func (h *PhonesHTTP) phoneBySerial(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			h.executorKey(w, r, serial)
+		case "wifi":
+			if r.Method != http.MethodPost {
+				http.Error(w, "только POST", http.StatusMethodNotAllowed)
+				return
+			}
+			h.phoneWifi(w, r, serial)
 		default:
 			http.NotFound(w, r)
 		}
@@ -391,4 +396,38 @@ func (h *PhonesHTTP) executorKey(w http.ResponseWriter, r *http.Request, serial 
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"serial": serial, "result": res})
+}
+
+func (h *PhonesHTTP) phoneWifi(w http.ResponseWriter, r *http.Request, serial string) {
+	if h.connector == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "connector не настроен"})
+		return
+	}
+	var body struct {
+		Action   string `json:"action"`
+		SSID     string `json:"ssid"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Action == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "укажите action (enable|disable) в JSON"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
+	defer cancel()
+
+	var err error
+	switch strings.ToLower(body.Action) {
+	case "enable":
+		err = h.connector.EnableWiFi(ctx, serial, body.SSID, body.Password)
+	case "disable":
+		err = h.connector.DisableWiFi(ctx, serial)
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "action должен быть enable или disable"})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"serial": serial, "status": body.Action})
 }

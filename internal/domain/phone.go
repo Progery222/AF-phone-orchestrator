@@ -33,6 +33,12 @@ type Phone struct {
 	CurrentIP           string
 	ProxyID             *int
 	WifiSSID            string
+	WiFiPass            string
+	ProxyIP             string
+	ProxyPort           int
+	ProxyUser           string
+	ProxyPass           string
+	ProvisionApps       []ProvisionApp
 	AdbPort             int
 	LastHeartbeat       *time.Time
 	HeartbeatCount      int
@@ -68,4 +74,23 @@ type PhoneStateEvent struct {
 	OldState string `json:"old_state"`
 	NewState string `json:"new_state"`
 	Error    string `json:"error,omitempty"`
+}
+
+// ProvisionApp — приложение для передачи в phone-provisioner.
+type ProvisionApp struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+	URL  string `json:"url,omitempty"`
+}
+
+// AddPhoneRequest — регистрация телефона в orchestrator.
+type AddPhoneRequest struct {
+	Serial    string         `json:"serial"`
+	WifiSSID  string         `json:"wifi_ssid,omitempty"`
+	WiFiPass  string         `json:"wifi_password,omitempty"`
+	ProxyIP   string         `json:"proxy_ip,omitempty"`
+	ProxyPort int            `json:"proxy_port,omitempty"`
+	ProxyUser string         `json:"proxy_username,omitempty"`
+	ProxyPass string         `json:"proxy_password,omitempty"`
+	Apps      []ProvisionApp `json:"apps,omitempty"`
 }

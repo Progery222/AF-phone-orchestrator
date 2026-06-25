@@ -91,6 +91,8 @@ go run ./cmd/server
 | `GRPC_ADDR` | `:50050` | gRPC orchestrator |
 | `OBSERVER_HTTP_URL` | `http://127.0.0.1:19090` | observer REST |
 | `EXECUTOR_GRPC_ADDR` | `localhost:50051` | executor gRPC |
+| `PROVISIONER_MODE` | `stub` | `http` для phone-provisioner |
+| `PROVISIONER_HTTP_URL` | `http://127.0.0.1:19092` | REST provisioner |
 | `NATS_URL` | `nats://localhost:4222` | брокер |
 | `RECOVERY_TIMEOUT_SEC` | `120` | таймаут NATS solve |
 | `STORE_MODE` | postgres | `memory` для локальных тестов |

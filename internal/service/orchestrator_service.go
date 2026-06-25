@@ -210,6 +210,7 @@ func (o *OrchestratorService) ReprovisionPhone(ctx context.Context, serial strin
 		return err
 	}
 	phone.CurrentStep = 0
+	phone.ReadyAt = nil
 	o.transition(ctx, &phone, domain.StateNew, nil, time.Now())
 	return nil
 }

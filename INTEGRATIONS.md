@@ -52,6 +52,29 @@ Env: `OBSERVER_HTTP_URL` (dev: `http://127.0.0.1:19090`).
 
 Перед выполнением orchestrator **refine** координат tap из `permission_allow_button` в XML.
 
+## Provisioner (HTTP)
+
+Orchestrator вызывает **phone-provisioner** при состояниях `wifi_setup` … `auth`:
+
+| Действие | Endpoint provisioner |
+|----------|----------------------|
+| Запуск настройки | `POST /provision` |
+| Polling статуса | `GET /status?serial=` |
+
+Env orchestrator:
+
+| Переменная | По умолчанию |
+|------------|--------------|
+| `PROVISIONER_MODE` | `http` (или `stub` для локальных тестов) |
+| `PROVISIONER_HTTP_URL` | `http://127.0.0.1:19092` |
+| `PROVISIONER_DEFAULT_PROXY_IP` | — |
+| `PROVISIONER_DEFAULT_PROXY_PORT` | `3128` |
+| `PROVISIONER_DEFAULT_WIFI_SSID` | — |
+
+При `ready` в provisioner orchestrator переводит телефон в `ready` → `working`.
+
+`POST /phones` принимает опционально `wifi_ssid`, `proxy_ip`, `apps` — передаются в provisioner.
+
 ## Connector
 
 Планируется gRPC `:50052` для ADB-сессий перед сценариями.

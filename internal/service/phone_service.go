@@ -32,7 +32,8 @@ func (s *PhoneService) GetPhone(ctx context.Context, serial string) (domain.Phon
 	return s.store.Get(ctx, serial)
 }
 
-func (s *PhoneService) AddPhone(ctx context.Context, serial string) (domain.Phone, error) {
+func (s *PhoneService) AddPhone(ctx context.Context, req domain.AddPhoneRequest) (domain.Phone, error) {
+	serial := req.Serial
 	if serial == "" {
 		return domain.Phone{}, domain.ErrInvalidSerial
 	}
@@ -43,11 +44,18 @@ func (s *PhoneService) AddPhone(ctx context.Context, serial string) (domain.Phon
 	}
 	now := time.Now()
 	phone := domain.Phone{
-		Serial:    serial,
-		State:     domain.StateNew,
-		AdbPort:   5555,
-		CreatedAt: now,
-		UpdatedAt: now,
+		Serial:        serial,
+		State:         domain.StateNew,
+		AdbPort:       5555,
+		WifiSSID:      req.WifiSSID,
+		WiFiPass:      req.WiFiPass,
+		ProxyIP:       req.ProxyIP,
+		ProxyPort:     req.ProxyPort,
+		ProxyUser:     req.ProxyUser,
+		ProxyPass:     req.ProxyPass,
+		ProvisionApps: req.Apps,
+		CreatedAt:     now,
+		UpdatedAt:     now,
 	}
 	if err := s.store.Save(ctx, phone); err != nil {
 		return domain.Phone{}, err

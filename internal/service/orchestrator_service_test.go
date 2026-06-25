@@ -43,10 +43,10 @@ func TestPhoneService_AddDuplicate(t *testing.T) {
 	store := repository.NewMemoryPhoneStore()
 	svc := NewPhoneService(store)
 	ctx := context.Background()
-	if _, err := svc.AddPhone(ctx, "x"); err != nil {
+	if _, err := svc.AddPhone(ctx, domain.AddPhoneRequest{Serial: "x"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.AddPhone(ctx, "x"); err != domain.ErrPhoneAlreadyExists {
+	if _, err := svc.AddPhone(ctx, domain.AddPhoneRequest{Serial: "x"}); err != domain.ErrPhoneAlreadyExists {
 		t.Fatalf("expected duplicate error, got %v", err)
 	}
 }

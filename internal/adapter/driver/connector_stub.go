@@ -21,6 +21,18 @@ func (s *StubConnector) GetStatus(_ context.Context, serial string) (domain.Phon
 	return domain.Phone{Serial: serial, State: domain.StateWorking, AdbPort: 5555}, nil
 }
 
+func (s *StubConnector) EnableWiFi(_ context.Context, serial, ssid, password string) error {
+	_ = serial
+	_ = ssid
+	_ = password
+	return nil
+}
+
+func (s *StubConnector) DisableWiFi(_ context.Context, serial string) error {
+	_ = serial
+	return nil
+}
+
 func (s *StubConnector) Ping(context.Context) error { return nil }
 
 var _ port.ConnectorClient = (*StubConnector)(nil)

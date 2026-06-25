@@ -26,9 +26,10 @@ func (h *OrchestratorHandler) Register(s *grpc.Server) {
 }
 
 type HealthDeps struct {
-	Observer port.ObserverClient
-	Recovery port.RecoveryClient
-	Executor port.ExecutorClient
+	Observer    port.ObserverClient
+	Recovery    port.RecoveryClient
+	Executor    port.ExecutorClient
+	Provisioner port.ProvisionClient
 }
 
 type HealthHandler struct {
@@ -64,6 +65,12 @@ func (h *HealthHandler) ready(w http.ResponseWriter, r *http.Request) {
 	if err := h.deps.Executor.Ping(ctx); err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "not ready", "executor": err.Error()})
 		return
+	}
+	if h.deps.Provisioner != nil {
+		if err := h.deps.Provisioner.Ping(ctx); err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "not ready", "provisioner": err.Error()})
+			return
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
 }

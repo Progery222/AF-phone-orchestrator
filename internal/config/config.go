@@ -15,6 +15,14 @@ type Config struct {
 	RecoveryGRPCAddr         string
 	ExecutorGRPCAddr       string
 	ConnectorGRPCAddr      string
+	ProvisionerHTTPURL     string
+	ProvisionerDefaultProxyIP   string
+	ProvisionerDefaultProxyPort int
+	ProvisionerDefaultProxyUser string
+	ProvisionerDefaultProxyPass string
+	ProvisionerDefaultWiFiSSID    string
+	ProvisionerDefaultWiFiPass    string
+	ProvisionerDefaultAppsJSON    string
 	NATSURL                string
 	NATSSubjectRecoveryIn  string
 	NATSSubjectRecoveryOut string
@@ -35,6 +43,14 @@ func Load() Config {
 		RecoveryGRPCAddr:        env("RECOVERY_GRPC_ADDR", "localhost:50054"),
 		ExecutorGRPCAddr:        env("EXECUTOR_GRPC_ADDR", "localhost:50051"),
 		ConnectorGRPCAddr:       env("CONNECTOR_GRPC_ADDR", "localhost:50052"),
+		ProvisionerHTTPURL:      env("PROVISIONER_HTTP_URL", "http://127.0.0.1:19092"),
+		ProvisionerDefaultProxyIP:   env("PROVISIONER_DEFAULT_PROXY_IP", ""),
+		ProvisionerDefaultProxyPort: envInt("PROVISIONER_DEFAULT_PROXY_PORT", 3128),
+		ProvisionerDefaultProxyUser: env("PROVISIONER_DEFAULT_PROXY_USER", ""),
+		ProvisionerDefaultProxyPass: env("PROVISIONER_DEFAULT_PROXY_PASS", ""),
+		ProvisionerDefaultWiFiSSID:  env("PROVISIONER_DEFAULT_WIFI_SSID", ""),
+		ProvisionerDefaultWiFiPass:  env("PROVISIONER_DEFAULT_WIFI_PASS", ""),
+		ProvisionerDefaultAppsJSON: env("PROVISIONER_DEFAULT_APPS_JSON", ""),
 		NATSURL:                 env("NATS_URL", "nats://localhost:4222"),
 		NATSSubjectRecoveryIn:   env("NATS_SUBJECT_RECOVERY_IN", "af.recovery.request"),
 		NATSSubjectRecoveryOut:  env("NATS_SUBJECT_RECOVERY_OUT", "af.recovery.response"),
