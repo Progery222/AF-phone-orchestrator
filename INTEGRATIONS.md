@@ -112,3 +112,71 @@ Env orchestrator:
 | `NATS_SUBJECT_CONTENT_DELETE` | `af.content.delete` |
 
 Distributor: `HTTP_ADDR=:19094`, `STORE_MODE=postgres`, `STORAGE_MODE=minio`, `NATS_URL`.
+
+## Contacts-manager (gRPC)
+
+Контакты на телефонах: orchestrator → gRPC `:50055` → contacts-manager → executor gRPC `:50051`.
+
+### Orchestrator HTTP (прокси к gRPC)
+
+| Endpoint | gRPC RPC |
+|----------|----------|
+| `POST /phones/{serial}/contacts/upload` | `Upload` |
+| `POST /phones/{serial}/contacts/sync` | `Sync` |
+| `POST /phones/{serial}/contacts/merge` | `Merge` |
+| `POST /phones/{serial}/contacts/groups` | `ApplyGroups` |
+| `GET /phones/{serial}/contacts` | `ListContacts` |
+| `GET /phones/{serial}/contacts/export` | `Export` |
+| `DELETE /phones/{serial}/contacts/{contact_id}` | `DeleteContact` |
+
+Env orchestrator:
+
+| Переменная | По умолчанию |
+|------------|--------------|
+| `CONTACTS_MODE` | `stub` (или `grpc` для живого сервиса) |
+| `CONTACTS_GRPC_ADDR` | `localhost:50055` |
+
+Contacts-manager: `GRPC_ADDR=:50055`, `EXECUTOR_MODE=grpc`, `EXECUTOR_GRPC_ADDR=localhost:50051`, `STORE_MODE=postgres`.
+
+## Video-generator (gRPC)
+
+Генерация и обработка видео: orchestrator → gRPC `:50056` → video-generator → MinIO / FFmpeg / Ollama.
+
+### Orchestrator HTTP (прокси к gRPC)
+
+| Endpoint | gRPC RPC |
+|----------|----------|
+| `POST /phones/{serial}/video/screenshots` | `CreateFromScreenshots` |
+| `POST /phones/{serial}/video/ai` | `GenerateAI` |
+| `POST /phones/{serial}/video/edit` | `EditVideo` |
+| `GET /phones/{serial}/video/jobs/{id}` | `GetJob` |
+| `DELETE /phones/{serial}/video/jobs/{id}` | `DeleteVideo` |
+
+Пример `POST /phones/{serial}/video/screenshots`:
+
+```json
+{
+  "screenshot_keys": ["R5CY331L8NF/screen1.png", "R5CY331L8NF/screen2.png"],
+  "audio_key": "library/audio/track.mp3",
+  "overlay_text": "Reels",
+  "profile": {"width": 1080, "height": 1920, "frame_sec": 2}
+}
+```
+
+Пример `POST /phones/{serial}/video/ai`:
+
+```json
+{
+  "prompt": "котики на закате",
+  "duration_sec": 5
+}
+```
+
+Env orchestrator:
+
+| Переменная | По умолчанию |
+|------------|--------------|
+| `VIDEO_MODE` | `stub` (или `grpc` для живого сервиса) |
+| `VIDEO_GRPC_ADDR` | `localhost:50056` |
+
+Video-generator: `GRPC_ADDR=:50056`, `MINIO_BUCKET=af-videos`, `AI_MODE=ollama`, `QUEUE_MODE=nats|sync`.

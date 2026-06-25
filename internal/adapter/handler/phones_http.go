@@ -20,10 +20,12 @@ type PhonesHTTP struct {
 	observer     port.ObserverClient
 	executor     port.ExecutorClient
 	content      port.ContentClient
+	contacts     port.ContactsClient
+	video        port.VideoClient
 }
 
-func NewPhonesHTTP(phones *service.PhoneService, orchestrator *service.OrchestratorService, connector port.ConnectorClient, observer port.ObserverClient, executor port.ExecutorClient, content port.ContentClient) *PhonesHTTP {
-	return &PhonesHTTP{phones: phones, orchestrator: orchestrator, connector: connector, observer: observer, executor: executor, content: content}
+func NewPhonesHTTP(phones *service.PhoneService, orchestrator *service.OrchestratorService, connector port.ConnectorClient, observer port.ObserverClient, executor port.ExecutorClient, content port.ContentClient, contacts port.ContactsClient, video port.VideoClient) *PhonesHTTP {
+	return &PhonesHTTP{phones: phones, orchestrator: orchestrator, connector: connector, observer: observer, executor: executor, content: content, contacts: contacts, video: video}
 }
 
 func (h *PhonesHTTP) Register(mux *http.ServeMux) {
@@ -187,6 +189,10 @@ func (h *PhonesHTTP) phoneBySerial(w http.ResponseWriter, r *http.Request) {
 			h.phoneWifi(w, r, serial)
 		case "content":
 			h.phoneContent(w, r, serial, nil)
+		case "contacts":
+			h.phoneContacts(w, r, serial, nil)
+		case "video":
+			h.phoneVideo(w, r, serial, nil)
 		default:
 			http.NotFound(w, r)
 		}
@@ -194,6 +200,14 @@ func (h *PhonesHTTP) phoneBySerial(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(parts) >= 2 && parts[1] == "content" {
 		h.phoneContent(w, r, serial, parts[2:])
+		return
+	}
+	if len(parts) >= 2 && parts[1] == "contacts" {
+		h.phoneContacts(w, r, serial, parts[2:])
+		return
+	}
+	if len(parts) >= 2 && parts[1] == "video" {
+		h.phoneVideo(w, r, serial, parts[2:])
 		return
 	}
 	http.NotFound(w, r)
@@ -523,5 +537,218 @@ func (h *PhonesHTTP) phoneContent(w http.ResponseWriter, r *http.Request, serial
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"serial": serial, "content_id": sub[0], "message": "удалено"})
+	}
+}
+
+func (h *PhonesHTTP) phoneContacts(w http.ResponseWriter, r *http.Request, serial string, sub []string) {
+	if h.contacts == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "contacts-manager не настроен"})
+		return
+	}
+	ctx := r.Context()
+	if len(sub) == 0 {
+		switch r.Method {
+		case http.MethodGet:
+			items, state, err := h.contacts.ListContacts(ctx, serial)
+			if err != nil {
+				writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"serial": serial, "contacts": items, "state": state})
+		default:
+			http.Error(w, "метод не поддерживается", http.StatusMethodNotAllowed)
+		}
+		return
+	}
+	switch sub[0] {
+	case "upload":
+		if r.Method != http.MethodPost {
+			http.Error(w, "только POST", http.StatusMethodNotAllowed)
+			return
+		}
+		var body struct {
+			Source      string   `json:"source"`
+			GroupFilter []string `json:"group_filter"`
+			VCardKey    string   `json:"vcard_key"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		state, err := h.contacts.Upload(ctx, serial, body.Source, body.GroupFilter, body.VCardKey)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, state)
+	case "sync":
+		if r.Method != http.MethodPost {
+			http.Error(w, "только POST", http.StatusMethodNotAllowed)
+			return
+		}
+		state, err := h.contacts.Sync(ctx, serial)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, state)
+	case "merge":
+		if r.Method != http.MethodPost {
+			http.Error(w, "только POST", http.StatusMethodNotAllowed)
+			return
+		}
+		state, err := h.contacts.Merge(ctx, serial)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, state)
+	case "groups":
+		if r.Method != http.MethodPost {
+			http.Error(w, "только POST", http.StatusMethodNotAllowed)
+			return
+		}
+		var body struct {
+			Groups []struct {
+				Name       string   `json:"name"`
+				ContactIDs []string `json:"contact_ids"`
+			} `json:"groups"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || len(body.Groups) == 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "укажите groups"})
+			return
+		}
+		groups := make([]port.ContactGroup, len(body.Groups))
+		for i, g := range body.Groups {
+			groups[i] = port.ContactGroup{Name: g.Name, ContactIDs: g.ContactIDs}
+		}
+		state, err := h.contacts.ApplyGroups(ctx, serial, groups)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, state)
+	case "export":
+		if r.Method != http.MethodGet {
+			http.Error(w, "только GET", http.StatusMethodNotAllowed)
+			return
+		}
+		format := r.URL.Query().Get("format")
+		data, outFmt, err := h.contacts.Export(ctx, serial, format)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		w.Header().Set("Content-Type", "text/vcard; charset=utf-8")
+		w.Header().Set("X-Export-Format", outFmt)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(data)
+	default:
+		if r.Method != http.MethodDelete {
+			http.Error(w, "только DELETE", http.StatusMethodNotAllowed)
+			return
+		}
+		if err := h.contacts.DeleteContact(ctx, sub[0]); err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"serial": serial, "contact_id": sub[0], "message": "удалено"})
+	}
+}
+
+func (h *PhonesHTTP) phoneVideo(w http.ResponseWriter, r *http.Request, serial string, sub []string) {
+	if h.video == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "video-generator не настроен"})
+		return
+	}
+	ctx := r.Context()
+	if len(sub) == 0 {
+		http.Error(w, "укажите подпуть: screenshots, ai, edit, jobs/{id}", http.StatusNotFound)
+		return
+	}
+	switch sub[0] {
+	case "screenshots":
+		if r.Method != http.MethodPost {
+			http.Error(w, "только POST", http.StatusMethodNotAllowed)
+			return
+		}
+		var body struct {
+			ScreenshotKeys []string                `json:"screenshot_keys"`
+			AudioKey       string                  `json:"audio_key"`
+			OverlayText    string                  `json:"overlay_text"`
+			Profile        port.VideoOutputProfile `json:"profile"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || len(body.ScreenshotKeys) == 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "укажите screenshot_keys"})
+			return
+		}
+		job, err := h.video.CreateFromScreenshots(ctx, serial, body.ScreenshotKeys, body.AudioKey, body.OverlayText, body.Profile)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusAccepted, job)
+	case "ai":
+		if r.Method != http.MethodPost {
+			http.Error(w, "только POST", http.StatusMethodNotAllowed)
+			return
+		}
+		var body struct {
+			Prompt      string                  `json:"prompt"`
+			Provider    string                  `json:"provider"`
+			DurationSec float64                 `json:"duration_sec"`
+			Profile     port.VideoOutputProfile `json:"profile"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Prompt == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "укажите prompt"})
+			return
+		}
+		job, err := h.video.GenerateAI(ctx, serial, body.Prompt, body.Provider, body.DurationSec, body.Profile)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusAccepted, job)
+	case "edit":
+		if r.Method != http.MethodPost {
+			http.Error(w, "только POST", http.StatusMethodNotAllowed)
+			return
+		}
+		var body struct {
+			SourceKey  string             `json:"source_key"`
+			Operations []port.VideoEditOp `json:"operations"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.SourceKey == "" || len(body.Operations) == 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "укажите source_key и operations"})
+			return
+		}
+		job, err := h.video.EditVideo(ctx, serial, body.SourceKey, body.Operations)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusAccepted, job)
+	case "jobs":
+		if len(sub) < 2 || sub[1] == "" {
+			http.NotFound(w, r)
+			return
+		}
+		jobID := sub[1]
+		switch r.Method {
+		case http.MethodGet:
+			job, err := h.video.GetJob(ctx, jobID)
+			if err != nil {
+				writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, job)
+		case http.MethodDelete:
+			if err := h.video.DeleteVideo(ctx, jobID); err != nil {
+				writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]string{"id": jobID, "deleted": "true"})
+		default:
+			http.Error(w, "метод не поддерживается", http.StatusMethodNotAllowed)
+		}
+	default:
+		http.NotFound(w, r)
 	}
 }

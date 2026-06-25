@@ -24,6 +24,8 @@ type Config struct {
 	ProvisionerDefaultWiFiPass    string
 	ProvisionerDefaultAppsJSON    string
 	ContentDistributorHTTPURL     string
+	ContactsGRPCAddr              string
+	VideoGRPCAddr                 string
 	NATSURL                string
 	NATSSubjectRecoveryIn  string
 	NATSSubjectRecoveryOut string
@@ -56,6 +58,8 @@ func Load() Config {
 		ProvisionerDefaultWiFiPass:  env("PROVISIONER_DEFAULT_WIFI_PASS", ""),
 		ProvisionerDefaultAppsJSON: env("PROVISIONER_DEFAULT_APPS_JSON", ""),
 		ContentDistributorHTTPURL:  env("CONTENT_DISTRIBUTOR_HTTP_URL", "http://127.0.0.1:19094"),
+		ContactsGRPCAddr:           env("CONTACTS_GRPC_ADDR", "localhost:50055"),
+		VideoGRPCAddr:              env("VIDEO_GRPC_ADDR", "localhost:50056"),
 		NATSURL:                 env("NATS_URL", "nats://localhost:4222"),
 		NATSSubjectRecoveryIn:   env("NATS_SUBJECT_RECOVERY_IN", "af.recovery.request"),
 		NATSSubjectRecoveryOut:  env("NATS_SUBJECT_RECOVERY_OUT", "af.recovery.response"),

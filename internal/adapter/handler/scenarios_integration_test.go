@@ -197,11 +197,11 @@ func newTestEnv(t *testing.T) *testEnv {
 	)
 	phones := service.NewPhoneService(store)
 	orchHandler := handler.NewOrchestratorHandler(flow, log)
-	phonesHTTP := handler.NewPhonesHTTP(phones, orch, driver.NewStubConnector(), observer, executor, driver.NewStubContent())
+	phonesHTTP := handler.NewPhonesHTTP(phones, orch, driver.NewStubConnector(), observer, executor, driver.NewStubContent(), driver.NewStubContacts(), driver.NewStubVideo())
 
 	mux := handler.NewHealthHandler(handler.HealthDeps{
 		Observer: observer, Recovery: recovery, Executor: executor,
-		Provisioner: driver.NewStubProvisioner(), Content: driver.NewStubContent(),
+		Provisioner: driver.NewStubProvisioner(), Content: driver.NewStubContent(), Contacts: driver.NewStubContacts(), Video: driver.NewStubVideo(),
 	}).Routes()
 	phonesHTTP.Register(mux)
 	mux.HandleFunc("/recovery/run", orchHandler.RunRecoveryHTTP)

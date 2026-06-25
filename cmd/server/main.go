@@ -50,6 +50,12 @@ func main() {
 	content, closeContent := openContent(cfg, logger)
 	defer closeContent()
 
+	contacts, closeContacts := openContacts(cfg, logger)
+	defer closeContacts()
+
+	video, closeVideo := openVideo(cfg, logger)
+	defer closeVideo()
+
 	lock := repository.NewMemoryPhoneLock()
 	flow := service.NewRecoveryFlowService(observer, recovery, executor, logger)
 	orch := service.NewOrchestratorService(
@@ -59,13 +65,13 @@ func main() {
 	phones := service.NewPhoneService(store)
 
 	orchHandler := handler.NewOrchestratorHandler(flow, logger)
-	phonesHTTP := handler.NewPhonesHTTP(phones, orch, connector, observer, executor, content)
+	phonesHTTP := handler.NewPhonesHTTP(phones, orch, connector, observer, executor, content, contacts, video)
 
 	grpcServer := grpc.NewServer()
 	orchHandler.Register(grpcServer)
 
 	mux := handler.NewHealthHandler(handler.HealthDeps{
-		Observer: observer, Recovery: recovery, Executor: executor, Provisioner: provision, Content: content,
+		Observer: observer, Recovery: recovery, Executor: executor, Provisioner: provision, Content: content, Contacts: contacts, Video: video,
 	}).Routes()
 	phonesHTTP.Register(mux)
 	mux.HandleFunc("/recovery/run", orchHandler.RunRecoveryHTTP)
@@ -204,4 +210,32 @@ func openContent(cfg config.Config, log *slog.Logger) (port.ContentClient, func(
 	}
 	log.Info("content-distributor http client", "url", cfg.ContentDistributorHTTPURL)
 	return driver.NewContentClient(httpClient, natsPub), cleanup
+}
+
+func openContacts(cfg config.Config, log *slog.Logger) (port.ContactsClient, func()) {
+	if mode := os.Getenv("CONTACTS_MODE"); mode == "" || strings.EqualFold(mode, "stub") {
+		log.Warn("contacts-manager stub mode")
+		return driver.NewStubContacts(), func() {}
+	}
+	client, cleanup, err := driver.NewContactsGRPC(cfg)
+	if err != nil {
+		log.Warn("contacts-manager grpc unavailable, stub", "error", err)
+		return driver.NewStubContacts(), func() {}
+	}
+	log.Info("contacts-manager grpc client", "addr", cfg.ContactsGRPCAddr)
+	return client, cleanup
+}
+
+func openVideo(cfg config.Config, log *slog.Logger) (port.VideoClient, func()) {
+	if mode := os.Getenv("VIDEO_MODE"); mode == "" || strings.EqualFold(mode, "stub") {
+		log.Warn("video-generator stub mode")
+		return driver.NewStubVideo(), func() {}
+	}
+	client, cleanup, err := driver.NewVideoGRPC(cfg)
+	if err != nil {
+		log.Warn("video-generator grpc unavailable, stub", "error", err)
+		return driver.NewStubVideo(), func() {}
+	}
+	log.Info("video-generator grpc client", "addr", cfg.VideoGRPCAddr)
+	return client, cleanup
 }
