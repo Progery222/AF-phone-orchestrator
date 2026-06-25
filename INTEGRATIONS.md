@@ -78,3 +78,37 @@ Env orchestrator:
 ## Connector
 
 Планируется gRPC `:50052` для ADB-сессий перед сценариями.
+
+## Content-distributor (HTTP + NATS)
+
+Контент **уже в MinIO** (загрузили другие сервисы). Orchestrator командует доставку.
+
+### Orchestrator HTTP
+
+| Endpoint | Назначение |
+|----------|------------|
+| `POST /phones/{serial}/content/register` | Зарегистрировать `object_key` из MinIO |
+| `POST /phones/{serial}/content/download` | Async NATS → push (`content_id` или `object_key`) |
+| `GET /phones/{serial}/content` | Список |
+| `DELETE /phones/{serial}/content` | Удалить всё |
+| `DELETE /phones/{serial}/content/{content_id}` | Удалить один файл |
+
+### NATS subjects
+
+| Subject | Payload |
+|---------|---------|
+| `af.content.download` | `{"serial","object_key"?,"content_id"?}` |
+| `af.content.delete` | `{"serial","content_id"?}` |
+| `af.content.ready` | `{"serial","content_id","device_path","status"}` |
+
+Env orchestrator:
+
+| Переменная | По умолчанию |
+|------------|--------------|
+| `CONTENT_MODE` | `stub` (или `http` для живого distributor) |
+| `CONTENT_DISTRIBUTOR_HTTP_URL` | `http://127.0.0.1:19094` |
+| `CONTENT_NATS_MODE` | включён ( `off` → sync HTTP download/delete) |
+| `NATS_SUBJECT_CONTENT_DOWNLOAD` | `af.content.download` |
+| `NATS_SUBJECT_CONTENT_DELETE` | `af.content.delete` |
+
+Distributor: `HTTP_ADDR=:19094`, `STORE_MODE=postgres`, `STORAGE_MODE=minio`, `NATS_URL`.

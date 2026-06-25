@@ -47,6 +47,9 @@ func main() {
 	events, closeEvents := openEvents(cfg, logger)
 	defer closeEvents()
 
+	content, closeContent := openContent(cfg, logger)
+	defer closeContent()
+
 	lock := repository.NewMemoryPhoneLock()
 	flow := service.NewRecoveryFlowService(observer, recovery, executor, logger)
 	orch := service.NewOrchestratorService(
@@ -56,13 +59,13 @@ func main() {
 	phones := service.NewPhoneService(store)
 
 	orchHandler := handler.NewOrchestratorHandler(flow, logger)
-	phonesHTTP := handler.NewPhonesHTTP(phones, orch, connector, observer, executor)
+	phonesHTTP := handler.NewPhonesHTTP(phones, orch, connector, observer, executor, content)
 
 	grpcServer := grpc.NewServer()
 	orchHandler.Register(grpcServer)
 
 	mux := handler.NewHealthHandler(handler.HealthDeps{
-		Observer: observer, Recovery: recovery, Executor: executor, Provisioner: provision,
+		Observer: observer, Recovery: recovery, Executor: executor, Provisioner: provision, Content: content,
 	}).Routes()
 	phonesHTTP.Register(mux)
 	mux.HandleFunc("/recovery/run", orchHandler.RunRecoveryHTTP)
@@ -175,4 +178,30 @@ func openEvents(cfg config.Config, log *slog.Logger) (port.EventPublisher, func(
 		return repository.NewNoopEventPublisher(), func() {}
 	}
 	return pub, cleanup
+}
+
+func openContent(cfg config.Config, log *slog.Logger) (port.ContentClient, func()) {
+	if mode := os.Getenv("CONTENT_MODE"); mode == "" || strings.EqualFold(mode, "stub") {
+		log.Warn("content-distributor stub mode")
+		return driver.NewStubContent(), func() {}
+	}
+	if cfg.ContentDistributorHTTPURL == "" {
+		log.Warn("CONTENT_DISTRIBUTOR_HTTP_URL пуст, content stub")
+		return driver.NewStubContent(), func() {}
+	}
+	httpClient := driver.NewContentHTTP(cfg)
+	var natsPub *driver.ContentNATS
+	var cleanup func() = func() {}
+	if !strings.EqualFold(os.Getenv("CONTENT_NATS_MODE"), "off") {
+		np, closeFn, err := driver.NewContentNATS(cfg)
+		if err != nil {
+			log.Warn("content nats unavailable, download/delete via HTTP sync", "error", err)
+		} else {
+			natsPub = np
+			cleanup = closeFn
+			log.Info("content nats publisher", "download", cfg.NATSSubjectContentDownload, "delete", cfg.NATSSubjectContentDelete)
+		}
+	}
+	log.Info("content-distributor http client", "url", cfg.ContentDistributorHTTPURL)
+	return driver.NewContentClient(httpClient, natsPub), cleanup
 }

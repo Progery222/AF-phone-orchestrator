@@ -19,10 +19,11 @@ type PhonesHTTP struct {
 	connector    port.ConnectorClient
 	observer     port.ObserverClient
 	executor     port.ExecutorClient
+	content      port.ContentClient
 }
 
-func NewPhonesHTTP(phones *service.PhoneService, orchestrator *service.OrchestratorService, connector port.ConnectorClient, observer port.ObserverClient, executor port.ExecutorClient) *PhonesHTTP {
-	return &PhonesHTTP{phones: phones, orchestrator: orchestrator, connector: connector, observer: observer, executor: executor}
+func NewPhonesHTTP(phones *service.PhoneService, orchestrator *service.OrchestratorService, connector port.ConnectorClient, observer port.ObserverClient, executor port.ExecutorClient, content port.ContentClient) *PhonesHTTP {
+	return &PhonesHTTP{phones: phones, orchestrator: orchestrator, connector: connector, observer: observer, executor: executor, content: content}
 }
 
 func (h *PhonesHTTP) Register(mux *http.ServeMux) {
@@ -184,9 +185,15 @@ func (h *PhonesHTTP) phoneBySerial(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			h.phoneWifi(w, r, serial)
+		case "content":
+			h.phoneContent(w, r, serial, nil)
 		default:
 			http.NotFound(w, r)
 		}
+		return
+	}
+	if len(parts) >= 2 && parts[1] == "content" {
+		h.phoneContent(w, r, serial, parts[2:])
 		return
 	}
 	http.NotFound(w, r)
@@ -430,4 +437,91 @@ func (h *PhonesHTTP) phoneWifi(w http.ResponseWriter, r *http.Request, serial st
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"serial": serial, "status": body.Action})
+}
+
+func (h *PhonesHTTP) phoneContent(w http.ResponseWriter, r *http.Request, serial string, sub []string) {
+	if h.content == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "content-distributor не настроен"})
+		return
+	}
+	ctx := r.Context()
+	if len(sub) == 0 {
+		switch r.Method {
+		case http.MethodGet:
+			items, err := h.content.ListForSerial(ctx, serial)
+			if err != nil {
+				writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"serial": serial, "items": items})
+		case http.MethodDelete:
+			if err := h.content.DeleteForSerial(ctx, serial); err != nil {
+				writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]string{"serial": serial, "message": "контент удалён"})
+		default:
+			http.Error(w, "метод не поддерживается", http.StatusMethodNotAllowed)
+		}
+		return
+	}
+	switch sub[0] {
+	case "register":
+		if r.Method != http.MethodPost {
+			http.Error(w, "только POST", http.StatusMethodNotAllowed)
+			return
+		}
+		var body struct {
+			ObjectKey string `json:"object_key"`
+			Filename  string `json:"filename"`
+			MediaType string `json:"media_type"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ObjectKey == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "укажите object_key (файл уже в MinIO)"})
+			return
+		}
+		item, err := h.content.Register(ctx, port.ContentRegisterRequest{
+			Serial: serial, ObjectKey: body.ObjectKey, Filename: body.Filename, MediaType: body.MediaType,
+		})
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, item)
+	case "download":
+		if r.Method != http.MethodPost {
+			http.Error(w, "только POST", http.StatusMethodNotAllowed)
+			return
+		}
+		var body struct {
+			ContentID string `json:"content_id"`
+			ObjectKey string `json:"object_key"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "некорректный JSON"})
+			return
+		}
+		if body.ContentID == "" && body.ObjectKey == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "укажите content_id или object_key"})
+			return
+		}
+		if err := h.content.DownloadAsync(ctx, serial, body.ContentID, body.ObjectKey); err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusAccepted, map[string]any{
+			"serial": serial, "content_id": body.ContentID, "object_key": body.ObjectKey, "status": "accepted",
+			"message": "загрузка на телефон запущена",
+		})
+	default:
+		if r.Method != http.MethodDelete {
+			http.Error(w, "только DELETE", http.StatusMethodNotAllowed)
+			return
+		}
+		if err := h.content.DeleteByContentID(ctx, serial, sub[0]); err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"serial": serial, "content_id": sub[0], "message": "удалено"})
+	}
 }

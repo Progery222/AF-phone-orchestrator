@@ -20,7 +20,7 @@ func TestPhonesHTTP_WifiEnable(t *testing.T) {
 		store, repository.NewMemoryPhoneLock(), driver.NewStubConnector(),
 		driver.NewStubProvisioner(), nil, repository.NewNoopEventPublisher(), nil, 30, 1,
 	)
-	h := handler.NewPhonesHTTP(phones, orch, driver.NewStubConnector(), nil, nil)
+	h := handler.NewPhonesHTTP(phones, orch, driver.NewStubConnector(), nil, nil, driver.NewStubContent())
 
 	body, _ := json.Marshal(map[string]string{
 		"action":   "enable",
@@ -46,7 +46,7 @@ func TestPhonesHTTP_WifiDisable(t *testing.T) {
 		store, repository.NewMemoryPhoneLock(), driver.NewStubConnector(),
 		driver.NewStubProvisioner(), nil, repository.NewNoopEventPublisher(), nil, 30, 1,
 	)
-	h := handler.NewPhonesHTTP(phones, orch, driver.NewStubConnector(), nil, nil)
+	h := handler.NewPhonesHTTP(phones, orch, driver.NewStubConnector(), nil, nil, driver.NewStubContent())
 
 	body, _ := json.Marshal(map[string]string{"action": "disable"})
 	req := httptest.NewRequest(http.MethodPost, "/phones/phone_42/wifi", bytes.NewReader(body))

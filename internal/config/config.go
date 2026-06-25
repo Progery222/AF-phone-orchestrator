@@ -23,11 +23,15 @@ type Config struct {
 	ProvisionerDefaultWiFiSSID    string
 	ProvisionerDefaultWiFiPass    string
 	ProvisionerDefaultAppsJSON    string
+	ContentDistributorHTTPURL     string
 	NATSURL                string
 	NATSSubjectRecoveryIn  string
 	NATSSubjectRecoveryOut string
 	NATSSubjectOutcome     string
 	NATSSubjectStateChanged string
+	NATSSubjectContentDownload string
+	NATSSubjectContentDelete   string
+	NATSSubjectContentReady    string
 	RecoveryTimeoutSec     int
 	OrchestratorTickSec    int
 	PhoneLockTTLSec        int
@@ -51,11 +55,15 @@ func Load() Config {
 		ProvisionerDefaultWiFiSSID:  env("PROVISIONER_DEFAULT_WIFI_SSID", ""),
 		ProvisionerDefaultWiFiPass:  env("PROVISIONER_DEFAULT_WIFI_PASS", ""),
 		ProvisionerDefaultAppsJSON: env("PROVISIONER_DEFAULT_APPS_JSON", ""),
+		ContentDistributorHTTPURL:  env("CONTENT_DISTRIBUTOR_HTTP_URL", "http://127.0.0.1:19094"),
 		NATSURL:                 env("NATS_URL", "nats://localhost:4222"),
 		NATSSubjectRecoveryIn:   env("NATS_SUBJECT_RECOVERY_IN", "af.recovery.request"),
 		NATSSubjectRecoveryOut:  env("NATS_SUBJECT_RECOVERY_OUT", "af.recovery.response"),
 		NATSSubjectOutcome:      env("NATS_SUBJECT_OUTCOME", "af.recovery.outcome"),
 		NATSSubjectStateChanged: env("NATS_SUBJECT_STATE_CHANGED", "phone.state.changed"),
+		NATSSubjectContentDownload: env("NATS_SUBJECT_CONTENT_DOWNLOAD", "af.content.download"),
+		NATSSubjectContentDelete:   env("NATS_SUBJECT_CONTENT_DELETE", "af.content.delete"),
+		NATSSubjectContentReady:    env("NATS_SUBJECT_CONTENT_READY", "af.content.ready"),
 		RecoveryTimeoutSec:      envInt("RECOVERY_TIMEOUT_SEC", 120),
 		OrchestratorTickSec:     envInt("ORCHESTRATOR_TICK_SEC", 2),
 		PhoneLockTTLSec:         envInt("PHONE_LOCK_TTL_SEC", 30),
