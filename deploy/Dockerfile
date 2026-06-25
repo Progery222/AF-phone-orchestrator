@@ -1,11 +1,17 @@
 # syntax=docker/dockerfile:1
 
-FROM golang:1.22-alpine AS builder
+# Build context is the repository root (E:\Dev\AF) so the local Go module
+# replaces resolve inside the builder:
+#   ../AF-phone-action-executor (shared executor proto)
+#   ../AF-phone-connector       (connector gRPC client)
+FROM golang:1.25-alpine AS builder
 WORKDIR /src
 RUN apk add --no-cache git
-COPY go.mod go.sum ./
+COPY AF-phone-action-executor/ ./AF-phone-action-executor/
+COPY AF-phone-connector/ ./AF-phone-connector/
+COPY AF-phone-orchestrator/ ./AF-phone-orchestrator/
+WORKDIR /src/AF-phone-orchestrator
 RUN go mod download
-COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o /phone-orchestrator ./cmd/server
 
 FROM gcr.io/distroless/static-debian12:nonroot
