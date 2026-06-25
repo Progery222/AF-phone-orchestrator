@@ -26,6 +26,10 @@ type PhoneLock interface {
 type ConnectorClient interface {
 	Connect(ctx context.Context, serial string) error
 	GetStatus(ctx context.Context, serial string) (domain.Phone, error)
+	// Wi-Fi управление делегируется connector-у (см. provisioner pipeline:
+	// "Wi-Fi через orchestrator → connector").
+	EnableWiFi(ctx context.Context, serial, ssid, password string) error
+	DisableWiFi(ctx context.Context, serial string) error
 	Ping(ctx context.Context) error
 }
 

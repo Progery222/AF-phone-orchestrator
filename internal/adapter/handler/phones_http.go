@@ -179,6 +179,12 @@ func (h *PhonesHTTP) phoneBySerial(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			h.executorKey(w, r, serial)
+		case "wifi":
+			if r.Method != http.MethodPost {
+				http.Error(w, "только POST", http.StatusMethodNotAllowed)
+				return
+			}
+			h.wifi(w, r, serial)
 		default:
 			http.NotFound(w, r)
 		}
@@ -391,4 +397,36 @@ func (h *PhonesHTTP) executorKey(w http.ResponseWriter, r *http.Request, serial 
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"serial": serial, "result": res})
+}
+
+// wifi принимает enable/disable от provisioner (port.WifiController) и
+// делегирует в connector через OrchestratorService.
+func (h *PhonesHTTP) wifi(w http.ResponseWriter, r *http.Request, serial string) {
+	var body struct {
+		Action   string `json:"action"`
+		SSID     string `json:"ssid"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "некорректный JSON"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	switch strings.ToLower(body.Action) {
+	case "enable":
+		if err := h.orchestrator.EnableWiFi(ctx, serial, body.SSID, body.Password); err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "wifi_enabled"})
+	case "disable":
+		if err := h.orchestrator.DisableWiFi(ctx, serial); err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "wifi_disabled"})
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "action должно быть enable или disable"})
+	}
 }

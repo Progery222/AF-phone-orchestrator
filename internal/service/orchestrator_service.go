@@ -194,6 +194,16 @@ func (o *OrchestratorService) ResumePhone(ctx context.Context, serial string) er
 	return nil
 }
 
+// EnableWiFi / DisableWiFi делегируют управление Wi-Fi в connector.
+// Используется provisioner-ом (WifiController) через POST /phones/{serial}/wifi.
+func (o *OrchestratorService) EnableWiFi(ctx context.Context, serial, ssid, password string) error {
+	return o.connector.EnableWiFi(ctx, serial, ssid, password)
+}
+
+func (o *OrchestratorService) DisableWiFi(ctx context.Context, serial string) error {
+	return o.connector.DisableWiFi(ctx, serial)
+}
+
 func (o *OrchestratorService) MarkError(ctx context.Context, serial, reason string) error {
 	phone, err := o.store.Get(ctx, serial)
 	if err != nil {
