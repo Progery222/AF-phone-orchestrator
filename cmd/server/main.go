@@ -71,7 +71,8 @@ func main() {
 	orchHandler.Register(grpcServer)
 
 	mux := handler.NewHealthHandler(handler.HealthDeps{
-		Observer: observer, Recovery: recovery, Executor: executor, Provisioner: provision, Content: content, Contacts: contacts, Video: video,
+		Observer: observer, Recovery: recovery, Executor: executor, Connector: connector,
+		Provisioner: provision, Content: content, Contacts: contacts, Video: video,
 	}).Routes()
 	phonesHTTP.Register(mux)
 	mux.HandleFunc("/recovery/run", orchHandler.RunRecoveryHTTP)

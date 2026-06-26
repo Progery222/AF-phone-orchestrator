@@ -200,7 +200,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	phonesHTTP := handler.NewPhonesHTTP(phones, orch, driver.NewStubConnector(), observer, executor, driver.NewStubContent(), driver.NewStubContacts(), driver.NewStubVideo())
 
 	mux := handler.NewHealthHandler(handler.HealthDeps{
-		Observer: observer, Recovery: recovery, Executor: executor,
+		Observer: observer, Recovery: recovery, Executor: executor, Connector: driver.NewStubConnector(),
 		Provisioner: driver.NewStubProvisioner(), Content: driver.NewStubContent(), Contacts: driver.NewStubContacts(), Video: driver.NewStubVideo(),
 	}).Routes()
 	phonesHTTP.Register(mux)

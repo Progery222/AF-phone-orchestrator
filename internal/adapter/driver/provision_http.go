@@ -209,7 +209,11 @@ func (c *ProvisionHTTP) getStatus(ctx context.Context, serial string) (*provisio
 }
 
 func (c *ProvisionHTTP) Ping(ctx context.Context) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/health", nil)
+	healthBase := strings.TrimRight(c.cfg.ProvisionerHealthURL, "/")
+	if healthBase == "" {
+		healthBase = c.baseURL
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthBase+"/health", nil)
 	if err != nil {
 		return err
 	}

@@ -16,6 +16,8 @@ type Config struct {
 	ExecutorGRPCAddr       string
 	ConnectorGRPCAddr      string
 	ProvisionerHTTPURL     string
+	ProvisionerHealthURL   string
+	ContentDistributorHealthURL string
 	ProvisionerDefaultProxyIP   string
 	ProvisionerDefaultProxyPort int
 	ProvisionerDefaultProxyUser string
@@ -48,8 +50,10 @@ func Load() Config {
 		ObserverHTTPURL:         env("OBSERVER_HTTP_URL", "http://127.0.0.1:19090"),
 		RecoveryGRPCAddr:        env("RECOVERY_GRPC_ADDR", "localhost:50054"),
 		ExecutorGRPCAddr:        env("EXECUTOR_GRPC_ADDR", "localhost:50051"),
-		ConnectorGRPCAddr:       env("CONNECTOR_GRPC_ADDR", "localhost:50052"),
+		ConnectorGRPCAddr:       env("CONNECTOR_GRPC_ADDR", "localhost:50058"),
 		ProvisionerHTTPURL:      env("PROVISIONER_HTTP_URL", "http://127.0.0.1:19092"),
+		ProvisionerHealthURL:  env("PROVISIONER_HEALTH_URL", "http://127.0.0.1:9096"),
+		ContentDistributorHealthURL: env("CONTENT_DISTRIBUTOR_HEALTH_URL", "http://127.0.0.1:19099"),
 		ProvisionerDefaultProxyIP:   env("PROVISIONER_DEFAULT_PROXY_IP", ""),
 		ProvisionerDefaultProxyPort: envInt("PROVISIONER_DEFAULT_PROXY_PORT", 3128),
 		ProvisionerDefaultProxyUser: env("PROVISIONER_DEFAULT_PROXY_USER", ""),
@@ -58,8 +62,8 @@ func Load() Config {
 		ProvisionerDefaultWiFiPass:  env("PROVISIONER_DEFAULT_WIFI_PASS", ""),
 		ProvisionerDefaultAppsJSON: env("PROVISIONER_DEFAULT_APPS_JSON", ""),
 		ContentDistributorHTTPURL:  env("CONTENT_DISTRIBUTOR_HTTP_URL", "http://127.0.0.1:19094"),
-		ContactsGRPCAddr:           env("CONTACTS_GRPC_ADDR", "localhost:50055"),
-		VideoGRPCAddr:              env("VIDEO_GRPC_ADDR", "localhost:50056"),
+		ContactsGRPCAddr:           env("CONTACTS_GRPC_ADDR", "localhost:50056"),
+		VideoGRPCAddr:              env("VIDEO_GRPC_ADDR", "localhost:50057"),
 		NATSURL:                 env("NATS_URL", "nats://localhost:4222"),
 		NATSSubjectRecoveryIn:   env("NATS_SUBJECT_RECOVERY_IN", "af.recovery.request"),
 		NATSSubjectRecoveryOut:  env("NATS_SUBJECT_RECOVERY_OUT", "af.recovery.response"),

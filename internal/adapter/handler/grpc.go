@@ -29,6 +29,7 @@ type HealthDeps struct {
 	Observer    port.ObserverClient
 	Recovery    port.RecoveryClient
 	Executor    port.ExecutorClient
+	Connector   port.ConnectorClient
 	Provisioner port.ProvisionClient
 	Content     port.ContentClient
 	Contacts    port.ContactsClient
@@ -68,6 +69,12 @@ func (h *HealthHandler) ready(w http.ResponseWriter, r *http.Request) {
 	if err := h.deps.Executor.Ping(ctx); err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "not ready", "executor": err.Error()})
 		return
+	}
+	if h.deps.Connector != nil {
+		if err := h.deps.Connector.Ping(ctx); err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "not ready", "connector": err.Error()})
+			return
+		}
 	}
 	if h.deps.Provisioner != nil {
 		if err := h.deps.Provisioner.Ping(ctx); err != nil {
