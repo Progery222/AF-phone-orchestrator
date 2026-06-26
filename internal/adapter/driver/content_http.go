@@ -15,14 +15,21 @@ import (
 )
 
 type ContentHTTP struct {
-	baseURL string
-	client  *http.Client
+	baseURL   string
+	healthURL string
+	client    *http.Client
 }
 
 func NewContentHTTP(cfg config.Config) *ContentHTTP {
+	healthBase := strings.TrimRight(cfg.ContentDistributorHealthURL, "/")
+	apiBase := strings.TrimRight(cfg.ContentDistributorHTTPURL, "/")
+	if healthBase == "" {
+		healthBase = apiBase
+	}
 	return &ContentHTTP{
-		baseURL: strings.TrimRight(cfg.ContentDistributorHTTPURL, "/"),
-		client:  &http.Client{Timeout: 120 * time.Second},
+		baseURL:   apiBase,
+		healthURL: healthBase,
+		client:    &http.Client{Timeout: 120 * time.Second},
 	}
 }
 
@@ -173,7 +180,7 @@ func (c *ContentHTTP) ListForSerial(ctx context.Context, serial string) ([]port.
 }
 
 func (c *ContentHTTP) Ping(ctx context.Context) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/health", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.healthURL+"/health", nil)
 	if err != nil {
 		return err
 	}

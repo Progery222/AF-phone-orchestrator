@@ -7,7 +7,7 @@ import (
 	"github.com/mobilefarm/af/phone-orchestrator/internal/port"
 )
 
-// StubConnector — заглушка phone-connector (gRPC :50052) до интеграции.
+// StubConnector — заглушка phone-connector (gRPC :50058) до интеграции.
 type StubConnector struct{}
 
 func NewStubConnector() *StubConnector { return &StubConnector{} }
