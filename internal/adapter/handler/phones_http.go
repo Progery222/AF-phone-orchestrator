@@ -79,6 +79,10 @@ func (h *PhonesHTTP) phoneBySerial(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	serial := parts[0]
+	if !h.phones.IsAllowed(serial) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "phone is not in PHONE_ALLOWLIST"})
+		return
+	}
 	if len(parts) == 1 && r.Method == http.MethodGet {
 		phone, err := h.phones.GetPhone(r.Context(), serial)
 		if err != nil {

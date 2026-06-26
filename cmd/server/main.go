@@ -62,7 +62,7 @@ func main() {
 		store, lock, connector, provision, flow, events, logger,
 		cfg.PhoneLockTTLSec, cfg.OrchestratorTickSec,
 	)
-	phones := service.NewPhoneService(store)
+	phones := service.NewPhoneService(store, cfg.PhoneAllowlist)
 
 	orchHandler := handler.NewOrchestratorHandler(flow, logger)
 	phonesHTTP := handler.NewPhonesHTTP(phones, orch, connector, observer, executor, content, contacts, video)
