@@ -200,14 +200,15 @@ func (s *PhoneService) IsAllowed(serial string) bool {
 }
 
 func (s *PhoneService) filterAllowed(phones []domain.Phone) []domain.Phone {
-	if len(s.allowlist) == 0 {
-		return phones
-	}
-	out := phones[:0]
+	out := make([]domain.Phone, 0, len(phones))
 	for _, phone := range phones {
-		if s.IsAllowed(phone.Serial) {
-			out = append(out, phone)
+		if domain.IsSandboxSerial(phone.Serial) {
+			continue
 		}
+		if len(s.allowlist) > 0 && !s.IsAllowed(phone.Serial) {
+			continue
+		}
+		out = append(out, phone)
 	}
 	return out
 }

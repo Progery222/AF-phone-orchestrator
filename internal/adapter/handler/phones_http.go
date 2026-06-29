@@ -232,6 +232,8 @@ func (h *PhonesHTTP) phoneBySerial(w http.ResponseWriter, r *http.Request) {
 			h.phoneVideo(w, r, serial, nil)
 		case "scenarios":
 			h.phoneScenarios(w, r, serial, nil)
+		case "apps":
+			h.phoneApps(w, r, serial, nil)
 		default:
 			http.NotFound(w, r)
 		}
@@ -251,6 +253,10 @@ func (h *PhonesHTTP) phoneBySerial(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(parts) >= 2 && parts[1] == "scenarios" {
 		h.phoneScenarios(w, r, serial, parts[2:])
+		return
+	}
+	if len(parts) >= 2 && parts[1] == "apps" {
+		h.phoneApps(w, r, serial, parts[2:])
 		return
 	}
 	http.NotFound(w, r)
