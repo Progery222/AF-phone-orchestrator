@@ -27,7 +27,7 @@ Executor в orchestrator пока **stub** (жесты не уходят на `:
 ## Запуск
 
 ```powershell
-cd AF-orkestrator
+cd AF-phone-orchestrator
 make e2e
 # или
 powershell -ExecutionPolicy Bypass -File scripts/run-e2e-bundle.ps1
