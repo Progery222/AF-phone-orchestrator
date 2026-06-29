@@ -4,7 +4,7 @@ type PhoneApp struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
 	Package  string `json:"package"`
-	Category string `json:"category"` // social | system | other
+	Category string `json:"category"` // social | system
 }
 
 var phoneAppsCatalog = []PhoneApp{
@@ -21,12 +21,6 @@ var phoneAppsCatalog = []PhoneApp{
 	{ID: "play_store", Name: "Google Play", Package: "com.android.vending", Category: "system"},
 	{ID: "settings", Name: "Настройки", Package: "com.android.settings", Category: "system"},
 	{ID: "myfiles", Name: "My Files", Package: "com.sec.android.app.myfiles", Category: "system"},
-}
-
-func PhoneAppsCatalog() []PhoneApp {
-	out := make([]PhoneApp, len(phoneAppsCatalog))
-	copy(out, phoneAppsCatalog)
-	return out
 }
 
 func PhoneAppsByCategory(category string) []PhoneApp {
