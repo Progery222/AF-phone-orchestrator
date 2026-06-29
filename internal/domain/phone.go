@@ -48,6 +48,7 @@ type Phone struct {
 	UpdatedAt          time.Time
 	ReadyAt            *time.Time
 	RetiredAt          *time.Time
+	StandSeqNumber     *int16
 }
 
 type PhoneStateLog struct {
@@ -92,12 +93,18 @@ type ProvisionApp struct {
 
 // AddPhoneRequest — регистрация телефона в orchestrator.
 type AddPhoneRequest struct {
-	Serial    string         `json:"serial"`
-	WifiSSID  string         `json:"wifi_ssid,omitempty"`
-	WiFiPass  string         `json:"wifi_password,omitempty"`
-	ProxyIP   string         `json:"proxy_ip,omitempty"`
-	ProxyPort int            `json:"proxy_port,omitempty"`
-	ProxyUser string         `json:"proxy_username,omitempty"`
-	ProxyPass string         `json:"proxy_password,omitempty"`
-	Apps      []ProvisionApp `json:"apps,omitempty"`
+	Serial         string         `json:"serial"`
+	StandSeqNumber *int16         `json:"stand_seq_number,omitempty"`
+	WifiSSID       string         `json:"wifi_ssid,omitempty"`
+	WiFiPass       string         `json:"wifi_password,omitempty"`
+	ProxyIP        string         `json:"proxy_ip,omitempty"`
+	ProxyPort      int            `json:"proxy_port,omitempty"`
+	ProxyUser      string         `json:"proxy_username,omitempty"`
+	ProxyPass      string         `json:"proxy_password,omitempty"`
+	Apps           []ProvisionApp `json:"apps,omitempty"`
+}
+
+// UpdateStandSeqRequest — обновление номера на стенде.
+type UpdateStandSeqRequest struct {
+	StandSeqNumber *int16 `json:"stand_seq_number"`
 }

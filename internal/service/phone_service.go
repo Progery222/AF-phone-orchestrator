@@ -60,18 +60,19 @@ func (s *PhoneService) AddPhone(ctx context.Context, req domain.AddPhoneRequest)
 	}
 	now := time.Now()
 	phone := domain.Phone{
-		Serial:        serial,
-		State:         domain.StateNew,
-		AdbPort:       5555,
-		WifiSSID:      req.WifiSSID,
-		WiFiPass:      req.WiFiPass,
-		ProxyIP:       req.ProxyIP,
-		ProxyPort:     req.ProxyPort,
-		ProxyUser:     req.ProxyUser,
-		ProxyPass:     req.ProxyPass,
-		ProvisionApps: req.Apps,
-		CreatedAt:     now,
-		UpdatedAt:     now,
+		Serial:         serial,
+		State:          domain.StateNew,
+		AdbPort:        5555,
+		StandSeqNumber: req.StandSeqNumber,
+		WifiSSID:       req.WifiSSID,
+		WiFiPass:       req.WiFiPass,
+		ProxyIP:        req.ProxyIP,
+		ProxyPort:      req.ProxyPort,
+		ProxyUser:      req.ProxyUser,
+		ProxyPass:      req.ProxyPass,
+		ProvisionApps:  req.Apps,
+		CreatedAt:      now,
+		UpdatedAt:      now,
 	}
 	if err := s.store.Save(ctx, phone); err != nil {
 		return domain.Phone{}, err
@@ -176,6 +177,18 @@ func (s *PhoneService) SyncLiveDevices(ctx context.Context, live []domain.Phone)
 		result.Missing++
 	}
 	return result, nil
+}
+
+func (s *PhoneService) SetStandSeqNumber(ctx context.Context, serial string, standSeq *int16) (domain.Phone, error) {
+	phone, err := s.store.Get(ctx, serial)
+	if err != nil {
+		return domain.Phone{}, err
+	}
+	phone.StandSeqNumber = standSeq
+	if err := s.store.Update(ctx, phone); err != nil {
+		return domain.Phone{}, err
+	}
+	return phone, nil
 }
 
 func (s *PhoneService) IsAllowed(serial string) bool {

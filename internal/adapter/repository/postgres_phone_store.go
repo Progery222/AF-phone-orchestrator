@@ -42,6 +42,7 @@ func (p *PostgresPhoneStore) ListActive(ctx context.Context) ([]domain.Phone, er
 		SELECT serial, state, current_step, COALESCE(last_error,''), COALESCE(model,''),
 		       COALESCE(android_version,''), COALESCE(screen_res_x,0), COALESCE(screen_res_y,0),
 		       COALESCE(current_ip,''), proxy_id, COALESCE(wifi_ssid,''), COALESCE(adb_port,5555),
+		       stand_seq_number,
 		       last_heartbeat, heartbeat_count, recovery_in_progress, COALESCE(last_error_hash,''),
 		       created_at, updated_at, ready_at, retired_at
 		FROM phones WHERE state NOT IN ('retired','error')`)
@@ -57,6 +58,7 @@ func (p *PostgresPhoneStore) ListAll(ctx context.Context) ([]domain.Phone, error
 		SELECT serial, state, current_step, COALESCE(last_error,''), COALESCE(model,''),
 		       COALESCE(android_version,''), COALESCE(screen_res_x,0), COALESCE(screen_res_y,0),
 		       COALESCE(current_ip,''), proxy_id, COALESCE(wifi_ssid,''), COALESCE(adb_port,5555),
+		       stand_seq_number,
 		       last_heartbeat, heartbeat_count, recovery_in_progress, COALESCE(last_error_hash,''),
 		       created_at, updated_at, ready_at, retired_at
 		FROM phones ORDER BY serial`)
@@ -72,6 +74,7 @@ func (p *PostgresPhoneStore) Get(ctx context.Context, serial string) (domain.Pho
 		SELECT serial, state, current_step, COALESCE(last_error,''), COALESCE(model,''),
 		       COALESCE(android_version,''), COALESCE(screen_res_x,0), COALESCE(screen_res_y,0),
 		       COALESCE(current_ip,''), proxy_id, COALESCE(wifi_ssid,''), COALESCE(adb_port,5555),
+		       stand_seq_number,
 		       last_heartbeat, heartbeat_count, recovery_in_progress, COALESCE(last_error_hash,''),
 		       created_at, updated_at, ready_at, retired_at
 		FROM phones WHERE serial = $1`, serial)
@@ -85,13 +88,13 @@ func (p *PostgresPhoneStore) Get(ctx context.Context, serial string) (domain.Pho
 func (p *PostgresPhoneStore) Save(ctx context.Context, phone domain.Phone) error {
 	_, err := p.pool.Exec(ctx, `
 		INSERT INTO phones (serial, state, current_step, last_error, model, android_version,
-			screen_res_x, screen_res_y, current_ip, proxy_id, wifi_ssid, adb_port,
+			screen_res_x, screen_res_y, current_ip, proxy_id, wifi_ssid, adb_port, stand_seq_number,
 			last_heartbeat, heartbeat_count, recovery_in_progress, last_error_hash,
 			created_at, updated_at, ready_at, retired_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
 		phone.Serial, string(phone.State), phone.CurrentStep, nullText(phone.LastError),
 		nullText(phone.Model), nullText(phone.AndroidVersion), nullInt(phone.ScreenResX), nullInt(phone.ScreenResY),
-		nullText(phone.CurrentIP), phone.ProxyID, nullText(phone.WifiSSID), phone.AdbPort,
+		nullText(phone.CurrentIP), phone.ProxyID, nullText(phone.WifiSSID), phone.AdbPort, phone.StandSeqNumber,
 		phone.LastHeartbeat, phone.HeartbeatCount, phone.RecoveryInProgress, nullText(phone.LastErrorHash),
 		phone.CreatedAt, phone.UpdatedAt, phone.ReadyAt, phone.RetiredAt,
 	)
@@ -103,12 +106,13 @@ func (p *PostgresPhoneStore) Update(ctx context.Context, phone domain.Phone) err
 	ct, err := p.pool.Exec(ctx, `
 		UPDATE phones SET state=$2, current_step=$3, last_error=$4, model=$5, android_version=$6,
 			screen_res_x=$7, screen_res_y=$8, current_ip=$9, proxy_id=$10, wifi_ssid=$11, adb_port=$12,
-			last_heartbeat=$13, heartbeat_count=$14, recovery_in_progress=$15, last_error_hash=$16,
-			updated_at=$17, ready_at=$18, retired_at=$19
+			stand_seq_number=$13,
+			last_heartbeat=$14, heartbeat_count=$15, recovery_in_progress=$16, last_error_hash=$17,
+			updated_at=$18, ready_at=$19, retired_at=$20
 		WHERE serial=$1`,
 		phone.Serial, string(phone.State), phone.CurrentStep, nullText(phone.LastError),
 		nullText(phone.Model), nullText(phone.AndroidVersion), nullInt(phone.ScreenResX), nullInt(phone.ScreenResY),
-		nullText(phone.CurrentIP), phone.ProxyID, nullText(phone.WifiSSID), phone.AdbPort,
+		nullText(phone.CurrentIP), phone.ProxyID, nullText(phone.WifiSSID), phone.AdbPort, phone.StandSeqNumber,
 		phone.LastHeartbeat, phone.HeartbeatCount, phone.RecoveryInProgress, nullText(phone.LastErrorHash),
 		phone.UpdatedAt, phone.ReadyAt, phone.RetiredAt,
 	)
@@ -165,10 +169,12 @@ func scanPhone(row pgxRow) (domain.Phone, error) {
 	var state string
 	var lastError, model, android, ip, ssid, hash string
 	var proxyID *int
+	var standSeqNumber *int16
 	var lastHB, readyAt, retiredAt *time.Time
 	err := row.Scan(
 		&phone.Serial, &state, &phone.CurrentStep, &lastError, &model, &android,
 		&phone.ScreenResX, &phone.ScreenResY, &ip, &proxyID, &ssid, &phone.AdbPort,
+		&standSeqNumber,
 		&lastHB, &phone.HeartbeatCount, &phone.RecoveryInProgress, &hash,
 		&phone.CreatedAt, &phone.UpdatedAt, &readyAt, &retiredAt,
 	)
@@ -182,6 +188,7 @@ func scanPhone(row pgxRow) (domain.Phone, error) {
 	phone.CurrentIP = ip
 	phone.ProxyID = proxyID
 	phone.WifiSSID = ssid
+	phone.StandSeqNumber = standSeqNumber
 	phone.LastErrorHash = hash
 	phone.LastHeartbeat = lastHB
 	phone.ReadyAt = readyAt

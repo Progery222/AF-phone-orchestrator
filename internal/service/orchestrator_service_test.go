@@ -50,3 +50,27 @@ func TestPhoneService_AddDuplicate(t *testing.T) {
 		t.Fatalf("expected duplicate error, got %v", err)
 	}
 }
+
+func TestPhoneService_SetStandSeqNumber(t *testing.T) {
+	store := repository.NewMemoryPhoneStore()
+	svc := NewPhoneService(store)
+	ctx := context.Background()
+	seq := int16(181)
+
+	phone, err := svc.AddPhone(ctx, domain.AddPhoneRequest{Serial: "phone-181", StandSeqNumber: &seq})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if phone.StandSeqNumber == nil || *phone.StandSeqNumber != 181 {
+		t.Fatalf("stand seq on add = %v, want 181", phone.StandSeqNumber)
+	}
+
+	next := int16(166)
+	phone, err = svc.SetStandSeqNumber(ctx, "phone-181", &next)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if phone.StandSeqNumber == nil || *phone.StandSeqNumber != 166 {
+		t.Fatalf("stand seq after update = %v, want 166", phone.StandSeqNumber)
+	}
+}

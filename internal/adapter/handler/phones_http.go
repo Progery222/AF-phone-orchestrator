@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -145,6 +146,26 @@ func (h *PhonesHTTP) phoneBySerial(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			writeJSON(w, http.StatusOK, map[string]string{"status": "new"})
+		case "stand-seq":
+			if r.Method != http.MethodPatch && r.Method != http.MethodPut {
+				http.Error(w, "только PATCH", http.StatusMethodNotAllowed)
+				return
+			}
+			var body domain.UpdateStandSeqRequest
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "неверный JSON"})
+				return
+			}
+			phone, err := h.phones.SetStandSeqNumber(r.Context(), serial, body.StandSeqNumber)
+			if err != nil {
+				if errors.Is(err, domain.ErrPhoneNotFound) {
+					writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+					return
+				}
+				writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, toPhoneJSON(phone))
 		case "screen":
 			if r.Method != http.MethodGet {
 				http.Error(w, "только GET", http.StatusMethodNotAllowed)
@@ -232,6 +253,9 @@ type phoneJSON struct {
 	Model              string  `json:"model,omitempty"`
 	AndroidVersion     string  `json:"android_version,omitempty"`
 	IP                 string  `json:"ip,omitempty"`
+	ScreenResX         int     `json:"screen_res_x,omitempty"`
+	ScreenResY         int     `json:"screen_res_y,omitempty"`
+	StandSeqNumber     *int16  `json:"stand_seq_number,omitempty"`
 	LastHeartbeat      string  `json:"last_heartbeat,omitempty"`
 	HeartbeatCount     int     `json:"heartbeat_count,omitempty"`
 	Error              string  `json:"error,omitempty"`
@@ -244,7 +268,9 @@ func toPhoneJSON(p domain.Phone) phoneJSON {
 	j := phoneJSON{
 		Serial: p.Serial, State: string(p.State), Model: p.Model,
 		AndroidVersion: p.AndroidVersion, IP: p.CurrentIP,
-		Error: p.LastError, LastErrorHash: p.LastErrorHash,
+		ScreenResX: p.ScreenResX, ScreenResY: p.ScreenResY,
+		StandSeqNumber: p.StandSeqNumber,
+		Error:          p.LastError, LastErrorHash: p.LastErrorHash,
 		RecoveryInProgress: p.RecoveryInProgress,
 		HeartbeatCount:     p.HeartbeatCount,
 	}
