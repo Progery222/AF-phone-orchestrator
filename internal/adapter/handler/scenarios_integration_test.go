@@ -125,19 +125,29 @@ func TestScenarios_E2E(t *testing.T) {
 			t.Fatal(resp.StatusCode)
 		}
 		var list struct {
+			Phones []struct {
+				Serial string `json:"serial"`
+			} `json:"phones"`
 			Total int `json:"total"`
-			Stats struct {
-				Working int `json:"working"`
-			} `json:"stats"`
 		}
 		_ = json.NewDecoder(resp.Body).Decode(&list)
-		if list.Total < 3 {
-			t.Fatalf("ожидалось >=3 телефонов, got %d", list.Total)
+		if list.Total != 0 {
+			t.Fatalf("TEST-PHONE должны быть скрыты из списка, got total=%d", list.Total)
+		}
+		for _, p := range list.Phones {
+			if domain.IsSandboxSerial(p.Serial) {
+				t.Fatalf("sandbox serial в списке: %s", p.Serial)
+			}
 		}
 
 		resp = env.get(t, "/stats")
 		if resp.StatusCode != http.StatusOK {
 			t.Fatal(resp.StatusCode)
+		}
+		var stats domain.PhoneStats
+		_ = json.NewDecoder(resp.Body).Decode(&stats)
+		if stats.Total != 0 {
+			t.Fatalf("stats: sandbox скрыты, ожидался total=0, got %d", stats.Total)
 		}
 
 		resp = env.post(t, "/phones/TEST-PHONE-003/remove", nil)
@@ -197,11 +207,11 @@ func newTestEnv(t *testing.T) *testEnv {
 	)
 	phones := service.NewPhoneService(store)
 	orchHandler := handler.NewOrchestratorHandler(flow, log)
-	phonesHTTP := handler.NewPhonesHTTP(phones, orch, driver.NewStubConnector(), observer, executor, driver.NewStubContent(), driver.NewStubContacts(), driver.NewStubVideo())
+	phonesHTTP := handler.NewPhonesHTTP(phones, orch, driver.NewStubConnector(), observer, executor, driver.NewStubContent(), driver.NewStubContacts(), driver.NewStubVideo(), driver.NewStubScenarios())
 
 	mux := handler.NewHealthHandler(handler.HealthDeps{
 		Observer: observer, Recovery: recovery, Executor: executor, Connector: driver.NewStubConnector(),
-		Provisioner: driver.NewStubProvisioner(), Content: driver.NewStubContent(), Contacts: driver.NewStubContacts(), Video: driver.NewStubVideo(),
+		Provisioner: driver.NewStubProvisioner(), Content: driver.NewStubContent(), Contacts: driver.NewStubContacts(), Video: driver.NewStubVideo(), Scenarios: driver.NewStubScenarios(),
 	}).Routes()
 	phonesHTTP.Register(mux)
 	mux.HandleFunc("/recovery/run", orchHandler.RunRecoveryHTTP)

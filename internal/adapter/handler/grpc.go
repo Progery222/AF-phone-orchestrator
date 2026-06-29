@@ -34,6 +34,7 @@ type HealthDeps struct {
 	Content     port.ContentClient
 	Contacts    port.ContactsClient
 	Video       port.VideoClient
+	Scenarios   port.ScenariosClient
 }
 
 type HealthHandler struct {
@@ -97,6 +98,12 @@ func (h *HealthHandler) ready(w http.ResponseWriter, r *http.Request) {
 	if h.deps.Video != nil {
 		if err := h.deps.Video.Ping(ctx); err != nil {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "not ready", "video": err.Error()})
+			return
+		}
+	}
+	if h.deps.Scenarios != nil {
+		if err := h.deps.Scenarios.Ping(ctx); err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "not ready", "scenarios": err.Error()})
 			return
 		}
 	}

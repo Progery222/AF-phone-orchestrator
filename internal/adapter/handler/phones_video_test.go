@@ -18,7 +18,7 @@ func newPhonesHTTPWithVideo(video port.VideoClient) *handler.PhonesHTTP {
 	store := repository.NewMemoryPhoneStore()
 	phones := service.NewPhoneService(store)
 	orch := service.NewOrchestratorService(store, repository.NewMemoryPhoneLock(), driver.NewStubConnector(), driver.NewStubProvisioner(), nil, repository.NewNoopEventPublisher(), nil, 30, 2)
-	return handler.NewPhonesHTTP(phones, orch, driver.NewStubConnector(), nil, nil, driver.NewStubContent(), driver.NewStubContacts(), video)
+	return handler.NewPhonesHTTP(phones, orch, driver.NewStubConnector(), nil, nil, driver.NewStubContent(), driver.NewStubContacts(), video, driver.NewStubScenarios())
 }
 
 func TestPhonesHTTP_VideoScreenshotsStub(t *testing.T) {

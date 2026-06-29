@@ -21,7 +21,7 @@ func newPhonesHTTPWithContacts(contacts port.ContactsClient) *handler.PhonesHTTP
 		store, repository.NewMemoryPhoneLock(), driver.NewStubConnector(),
 		driver.NewStubProvisioner(), nil, repository.NewNoopEventPublisher(), nil, 30, 1,
 	)
-	return handler.NewPhonesHTTP(phones, orch, driver.NewStubConnector(), nil, nil, driver.NewStubContent(), contacts, driver.NewStubVideo())
+	return handler.NewPhonesHTTP(phones, orch, driver.NewStubConnector(), nil, nil, driver.NewStubContent(), contacts, driver.NewStubVideo(), driver.NewStubScenarios())
 }
 
 func TestPhonesHTTP_ContactsStubUpload(t *testing.T) {

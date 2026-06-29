@@ -28,6 +28,8 @@ type Config struct {
 	ContentDistributorHTTPURL   string
 	ContactsGRPCAddr            string
 	VideoGRPCAddr               string
+	ScenariosHTTPURL            string
+	ScenariosHealthURL          string
 	NATSURL                     string
 	NATSSubjectRecoveryIn       string
 	NATSSubjectRecoveryOut      string
@@ -65,6 +67,8 @@ func Load() Config {
 		ContentDistributorHTTPURL:   env("CONTENT_DISTRIBUTOR_HTTP_URL", "http://127.0.0.1:19094"),
 		ContactsGRPCAddr:            env("CONTACTS_GRPC_ADDR", "localhost:50056"),
 		VideoGRPCAddr:               env("VIDEO_GRPC_ADDR", "localhost:50057"),
+		ScenariosHTTPURL:            env("SCENARIOS_HTTP_URL", "http://127.0.0.1:19095"),
+		ScenariosHealthURL:          env("SCENARIOS_HEALTH_URL", "http://127.0.0.1:19098"),
 		NATSURL:                     env("NATS_URL", "nats://localhost:4222"),
 		NATSSubjectRecoveryIn:       env("NATS_SUBJECT_RECOVERY_IN", "af.recovery.request"),
 		NATSSubjectRecoveryOut:      env("NATS_SUBJECT_RECOVERY_OUT", "af.recovery.response"),

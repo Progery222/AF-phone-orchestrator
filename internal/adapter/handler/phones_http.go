@@ -23,10 +23,11 @@ type PhonesHTTP struct {
 	content      port.ContentClient
 	contacts     port.ContactsClient
 	video        port.VideoClient
+	scenarios    port.ScenariosClient
 }
 
-func NewPhonesHTTP(phones *service.PhoneService, orchestrator *service.OrchestratorService, connector port.ConnectorClient, observer port.ObserverClient, executor port.ExecutorClient, content port.ContentClient, contacts port.ContactsClient, video port.VideoClient) *PhonesHTTP {
-	return &PhonesHTTP{phones: phones, orchestrator: orchestrator, connector: connector, observer: observer, executor: executor, content: content, contacts: contacts, video: video}
+func NewPhonesHTTP(phones *service.PhoneService, orchestrator *service.OrchestratorService, connector port.ConnectorClient, observer port.ObserverClient, executor port.ExecutorClient, content port.ContentClient, contacts port.ContactsClient, video port.VideoClient, scenarios port.ScenariosClient) *PhonesHTTP {
+	return &PhonesHTTP{phones: phones, orchestrator: orchestrator, connector: connector, observer: observer, executor: executor, content: content, contacts: contacts, video: video, scenarios: scenarios}
 }
 
 func (h *PhonesHTTP) Register(mux *http.ServeMux) {
@@ -63,6 +64,10 @@ func (h *PhonesHTTP) listOrAdd(w http.ResponseWriter, r *http.Request) {
 		}
 		phone, err := h.phones.AddPhone(r.Context(), body)
 		if err != nil {
+			if errors.Is(err, domain.ErrSandboxSerial) {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+				return
+			}
 			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 			return
 		}
@@ -98,6 +103,10 @@ func (h *PhonesHTTP) phoneBySerial(w http.ResponseWriter, r *http.Request) {
 			}
 			phone, err := h.phones.AddPhone(r.Context(), domain.AddPhoneRequest{Serial: serial})
 			if err != nil {
+				if errors.Is(err, domain.ErrSandboxSerial) {
+					writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+					return
+				}
 				writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 				return
 			}
@@ -220,6 +229,8 @@ func (h *PhonesHTTP) phoneBySerial(w http.ResponseWriter, r *http.Request) {
 			h.phoneContacts(w, r, serial, nil)
 		case "video":
 			h.phoneVideo(w, r, serial, nil)
+		case "scenarios":
+			h.phoneScenarios(w, r, serial, nil)
 		default:
 			http.NotFound(w, r)
 		}
@@ -235,6 +246,10 @@ func (h *PhonesHTTP) phoneBySerial(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(parts) >= 2 && parts[1] == "video" {
 		h.phoneVideo(w, r, serial, parts[2:])
+		return
+	}
+	if len(parts) >= 2 && parts[1] == "scenarios" {
+		h.phoneScenarios(w, r, serial, parts[2:])
 		return
 	}
 	http.NotFound(w, r)
@@ -822,6 +837,129 @@ func (h *PhonesHTTP) phoneVideo(w http.ResponseWriter, r *http.Request, serial s
 		default:
 			http.Error(w, "метод не поддерживается", http.StatusMethodNotAllowed)
 		}
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+func (h *PhonesHTTP) phoneScenarios(w http.ResponseWriter, r *http.Request, serial string, sub []string) {
+	if h.scenarios == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "AF-scenarios не настроен"})
+		return
+	}
+	ctx := r.Context()
+	if len(sub) == 0 {
+		if r.Method != http.MethodGet {
+			http.Error(w, "только GET", http.StatusMethodNotAllowed)
+			return
+		}
+		items, err := h.scenarios.ListForSerial(ctx, serial)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"serial": serial, "items": items})
+		return
+	}
+	if sub[0] == "generate" {
+		if r.Method != http.MethodPost {
+			http.Error(w, "только POST", http.StatusMethodNotAllowed)
+			return
+		}
+		var body struct {
+			Prompt string `json:"prompt"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Prompt == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "укажите prompt"})
+			return
+		}
+		files, warnings, err := h.scenarios.Generate(ctx, serial, body.Prompt)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"scenario_yaml": files.ScenarioYAML, "variables_yaml": files.VariablesYAML, "warnings": warnings,
+		})
+		return
+	}
+	if sub[0] == "run-step" {
+		if r.Method != http.MethodPost {
+			http.Error(w, "только POST", http.StatusMethodNotAllowed)
+			return
+		}
+		var body struct {
+			ScenarioID string            `json:"scenario_id"`
+			StepID     string            `json:"step_id"`
+			Action     string            `json:"action"`
+			Params     map[string]string `json:"params"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ScenarioID == "" || body.StepID == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "укажите scenario_id и step_id"})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"serial": serial, "scenario_id": body.ScenarioID, "step_id": body.StepID,
+			"action": body.Action, "status": "accepted",
+			"message": "шаг сценария принят (stub: полное исполнение — в разработке)",
+		})
+		return
+	}
+	scenarioID := sub[0]
+	if len(sub) == 1 {
+		switch r.Method {
+		case http.MethodGet:
+			files, err := h.scenarios.Get(ctx, serial, scenarioID)
+			if err != nil {
+				writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, files)
+		case http.MethodPut:
+			var files port.ScenarioFiles
+			if err := json.NewDecoder(r.Body).Decode(&files); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "некорректный JSON"})
+				return
+			}
+			if err := h.scenarios.Put(ctx, serial, scenarioID, files); err != nil {
+				writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]string{"message": "сценарий сохранён"})
+		case http.MethodDelete:
+			if err := h.scenarios.Delete(ctx, serial, scenarioID); err != nil {
+				writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]string{"message": "сценарий удалён"})
+		default:
+			http.Error(w, "метод не поддерживается", http.StatusMethodNotAllowed)
+		}
+		return
+	}
+	switch sub[1] {
+	case "status":
+		if r.Method != http.MethodGet {
+			http.Error(w, "только GET", http.StatusMethodNotAllowed)
+			return
+		}
+		st, err := h.scenarios.GetStatus(ctx, serial, scenarioID)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, st)
+	case "logs":
+		if r.Method != http.MethodGet {
+			http.Error(w, "только GET", http.StatusMethodNotAllowed)
+			return
+		}
+		logs, err := h.scenarios.GetLogs(ctx, serial, scenarioID, r.URL.Query().Get("date"))
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"logs": logs})
 	default:
 		http.NotFound(w, r)
 	}

@@ -56,6 +56,9 @@ func main() {
 	video, closeVideo := openVideo(cfg, logger)
 	defer closeVideo()
 
+	scenarios, closeScenarios := openScenarios(cfg, logger)
+	defer closeScenarios()
+
 	lock := repository.NewMemoryPhoneLock()
 	flow := service.NewRecoveryFlowService(observer, recovery, executor, logger)
 	orch := service.NewOrchestratorService(
@@ -65,14 +68,14 @@ func main() {
 	phones := service.NewPhoneService(store, cfg.PhoneAllowlist)
 
 	orchHandler := handler.NewOrchestratorHandler(flow, logger)
-	phonesHTTP := handler.NewPhonesHTTP(phones, orch, connector, observer, executor, content, contacts, video)
+	phonesHTTP := handler.NewPhonesHTTP(phones, orch, connector, observer, executor, content, contacts, video, scenarios)
 
 	grpcServer := grpc.NewServer()
 	orchHandler.Register(grpcServer)
 
 	mux := handler.NewHealthHandler(handler.HealthDeps{
 		Observer: observer, Recovery: recovery, Executor: executor, Connector: connector,
-		Provisioner: provision, Content: content, Contacts: contacts, Video: video,
+		Provisioner: provision, Content: content, Contacts: contacts, Video: video, Scenarios: scenarios,
 	}).Routes()
 	phonesHTTP.Register(mux)
 	mux.HandleFunc("/recovery/run", orchHandler.RunRecoveryHTTP)
@@ -239,4 +242,17 @@ func openVideo(cfg config.Config, log *slog.Logger) (port.VideoClient, func()) {
 	}
 	log.Info("video-generator grpc client", "addr", cfg.VideoGRPCAddr)
 	return client, cleanup
+}
+
+func openScenarios(cfg config.Config, log *slog.Logger) (port.ScenariosClient, func()) {
+	if mode := os.Getenv("SCENARIOS_MODE"); mode == "" || strings.EqualFold(mode, "stub") {
+		log.Warn("AF-scenarios stub mode")
+		return driver.NewStubScenarios(), func() {}
+	}
+	if cfg.ScenariosHTTPURL == "" {
+		log.Warn("SCENARIOS_HTTP_URL пуст, scenarios stub")
+		return driver.NewStubScenarios(), func() {}
+	}
+	log.Info("AF-scenarios http client", "url", cfg.ScenariosHTTPURL)
+	return driver.NewScenariosHTTP(cfg), func() {}
 }
