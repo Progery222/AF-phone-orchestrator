@@ -30,6 +30,12 @@ func (s *StubExecutor) Swipe(_ context.Context, serial string, x0, y0, x1, y1 in
 	}, nil
 }
 
+func (s *StubExecutor) TypeText(_ context.Context, serial string, text string) (domain.ExecutorActionResult, error) {
+	return domain.ExecutorActionResult{
+		Action: "type_text", Status: "ok", Message: "stub",
+	}, nil
+}
+
 func (s *StubExecutor) Key(_ context.Context, serial string, key string) (domain.ExecutorActionResult, error) {
 	return domain.ExecutorActionResult{
 		Action: "key", Status: "ok", Message: key + " stub",

@@ -57,6 +57,9 @@ func (stubExecutor) Tap(context.Context, string, int32, int32) (domain.ExecutorA
 func (stubExecutor) Swipe(context.Context, string, int32, int32, int32, int32) (domain.ExecutorActionResult, error) {
 	return domain.ExecutorActionResult{Action: "swipe", Status: "ok"}, nil
 }
+func (stubExecutor) TypeText(context.Context, string, string) (domain.ExecutorActionResult, error) {
+	return domain.ExecutorActionResult{Action: "type_text", Status: "ok"}, nil
+}
 func (stubExecutor) Key(context.Context, string, string) (domain.ExecutorActionResult, error) {
 	return domain.ExecutorActionResult{Action: "key", Status: "ok"}, nil
 }

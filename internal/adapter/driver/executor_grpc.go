@@ -59,6 +59,20 @@ func (e *ExecutorGRPC) Swipe(ctx context.Context, serial string, x0, y0, x1, y1 
 	return fromProtoResult(res), resultError(res)
 }
 
+func (e *ExecutorGRPC) TypeText(ctx context.Context, serial string, text string) (domain.ExecutorActionResult, error) {
+	res, err := e.client.TypeText(ctx, &executorv1.TypeTextRequest{
+		IdempotencyKey: idempotencyKey(serial, "type"),
+		Serial:         serial,
+		Text:           text,
+		Typos:          true,
+		Lang:           "auto",
+	})
+	if err != nil {
+		return domain.ExecutorActionResult{}, err
+	}
+	return fromProtoResult(res), resultError(res)
+}
+
 func (e *ExecutorGRPC) Key(ctx context.Context, serial string, key string) (domain.ExecutorActionResult, error) {
 	res, err := e.client.Key(ctx, &executorv1.KeyRequest{
 		IdempotencyKey: idempotencyKey(serial, "key"),
@@ -126,8 +140,8 @@ func stepToAction(step domain.SolutionStep) (*executorv1.Action, bool) {
 		return &executorv1.Action{
 			Payload: &executorv1.Action_Tap{
 				Tap: &executorv1.TapAction{
-					X: int32(step.X),
-					Y: int32(step.Y),
+					X:      int32(step.X),
+					Y:      int32(step.Y),
 					Params: &executorv1.GestureParams{Fast: true},
 				},
 			},

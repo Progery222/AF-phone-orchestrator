@@ -196,6 +196,12 @@ func (h *PhonesHTTP) phoneBySerial(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			h.executorSwipe(w, r, serial)
+		case "type":
+			if r.Method != http.MethodPost {
+				http.Error(w, "только POST", http.StatusMethodNotAllowed)
+				return
+			}
+			h.executorType(w, r, serial)
 		case "key":
 			if r.Method != http.MethodPost {
 				http.Error(w, "только POST", http.StatusMethodNotAllowed)
@@ -412,6 +418,28 @@ func (h *PhonesHTTP) executorSwipe(w http.ResponseWriter, r *http.Request, seria
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 	res, err := h.executor.Swipe(ctx, serial, body.X0, body.Y0, body.X1, body.Y1)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"serial": serial, "result": res})
+}
+
+func (h *PhonesHTTP) executorType(w http.ResponseWriter, r *http.Request, serial string) {
+	if h.executor == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "executor не настроен"})
+		return
+	}
+	var body struct {
+		Text string `json:"text"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.Text) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "укажите text в JSON"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	res, err := h.executor.TypeText(ctx, serial, body.Text)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
