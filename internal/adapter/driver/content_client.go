@@ -35,6 +35,14 @@ func (c *ContentClient) DeleteForSerial(ctx context.Context, serial string) erro
 	return c.nats.PublishDelete(ctx, serial, "")
 }
 
+func (c *ContentClient) DeleteDeviceForSerial(ctx context.Context, serial string) error {
+	return c.http.DeleteDeviceForSerialHTTP(ctx, serial)
+}
+
+func (c *ContentClient) DeleteStorageForSerial(ctx context.Context, serial, extraObjectKey string) error {
+	return c.http.DeleteStorageForSerialHTTP(ctx, serial, extraObjectKey)
+}
+
 func (c *ContentClient) DeleteByContentID(ctx context.Context, serial, contentID string) error {
 	if c.nats == nil {
 		return c.http.DeleteByContentIDHTTP(ctx, serial, contentID)
@@ -74,6 +82,10 @@ func (s *StubContent) Register(_ context.Context, req port.ContentRegisterReques
 func (s *StubContent) DownloadAsync(context.Context, string, string, string) error { return nil }
 
 func (s *StubContent) DeleteForSerial(context.Context, string) error { return nil }
+
+func (s *StubContent) DeleteDeviceForSerial(context.Context, string) error { return nil }
+
+func (s *StubContent) DeleteStorageForSerial(context.Context, string, string) error { return nil }
 
 func (s *StubContent) DeleteByContentID(context.Context, string, string) error { return nil }
 

@@ -3,6 +3,8 @@ package driver
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	connectorv1 "github.com/mobilefarm/af/phone-connector/gen/connector/v1"
@@ -28,6 +30,36 @@ func NewConnectorGRPC(cfg config.Config) (*ConnectorGRPC, func(), error) {
 		client: connectorv1.NewConnectorServiceClient(conn),
 		conn:   conn,
 	}, func() { _ = conn.Close() }, nil
+}
+
+func (c *ConnectorGRPC) ListDevices(ctx context.Context) ([]domain.Phone, error) {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	resp, err := c.client.ListDevices(ctx, &connectorv1.ListDevicesRequest{})
+	if err != nil {
+		return nil, err
+	}
+
+	phones := make([]domain.Phone, 0, len(resp.GetDevices()))
+	for _, dev := range resp.GetDevices() {
+		serial := strings.TrimSpace(dev.GetSerial())
+		if serial == "" {
+			continue
+		}
+		phone := domain.Phone{
+			Serial:  serial,
+			State:   domain.StateWorking,
+			Model:   dev.GetModel(),
+			AdbPort: 5555,
+		}
+		if ip, port := splitADBTarget(serial); ip != "" {
+			phone.CurrentIP = ip
+			phone.AdbPort = port
+		}
+		phones = append(phones, phone)
+	}
+	return phones, nil
 }
 
 func (c *ConnectorGRPC) Connect(ctx context.Context, serial string) error {
@@ -110,6 +142,18 @@ func (c *ConnectorGRPC) Ping(ctx context.Context) error {
 			}
 		}
 	}
+}
+
+func splitADBTarget(serial string) (string, int) {
+	idx := strings.LastIndex(serial, ":")
+	if idx <= 0 || idx == len(serial)-1 {
+		return "", 0
+	}
+	port, err := strconv.Atoi(serial[idx+1:])
+	if err != nil || port <= 0 {
+		return "", 0
+	}
+	return serial[:idx], port
 }
 
 var _ port.ConnectorClient = (*ConnectorGRPC)(nil)

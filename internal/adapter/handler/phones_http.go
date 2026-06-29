@@ -79,10 +79,6 @@ func (h *PhonesHTTP) phoneBySerial(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	serial := parts[0]
-	if !h.phones.IsAllowed(serial) {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "phone is not in PHONE_ALLOWLIST"})
-		return
-	}
 	if len(parts) == 1 && r.Method == http.MethodGet {
 		phone, err := h.phones.GetPhone(r.Context(), serial)
 		if err != nil {
@@ -531,6 +527,26 @@ func (h *PhonesHTTP) phoneContent(w http.ResponseWriter, r *http.Request, serial
 			"serial": serial, "content_id": body.ContentID, "object_key": body.ObjectKey, "status": "accepted",
 			"message": "загрузка на телефон запущена",
 		})
+	case "device":
+		if r.Method != http.MethodDelete {
+			http.Error(w, "только DELETE", http.StatusMethodNotAllowed)
+			return
+		}
+		if err := h.content.DeleteDeviceForSerial(ctx, serial); err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"serial": serial, "message": "контент удалён с телефона"})
+	case "storage":
+		if r.Method != http.MethodDelete {
+			http.Error(w, "только DELETE", http.StatusMethodNotAllowed)
+			return
+		}
+		if err := h.content.DeleteStorageForSerial(ctx, serial, r.URL.Query().Get("extra_object_key")); err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"serial": serial, "message": "контент удалён из хранилища"})
 	default:
 		if r.Method != http.MethodDelete {
 			http.Error(w, "только DELETE", http.StatusMethodNotAllowed)

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -117,6 +118,45 @@ func (c *ContentHTTP) DeleteForSerialHTTP(ctx context.Context, serial string) er
 	if resp.StatusCode >= 400 {
 		b, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("content-distributor DELETE /content/%s HTTP %d: %s", serial, resp.StatusCode, string(b))
+	}
+	return nil
+}
+
+func (c *ContentHTTP) DeleteDeviceForSerialHTTP(ctx context.Context, serial string) error {
+	endpoint := c.baseURL + "/content/" + serial + "/device"
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodDelete, endpoint, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := c.client.Do(httpReq)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("content-distributor DELETE %s HTTP %d: %s", endpoint, resp.StatusCode, string(b))
+	}
+	return nil
+}
+
+func (c *ContentHTTP) DeleteStorageForSerialHTTP(ctx context.Context, serial, extraObjectKey string) error {
+	endpoint := c.baseURL + "/content/" + serial + "/storage"
+	if extraObjectKey != "" {
+		endpoint += "?extra_object_key=" + url.QueryEscape(extraObjectKey)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodDelete, endpoint, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := c.client.Do(httpReq)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("content-distributor DELETE %s HTTP %d: %s", endpoint, resp.StatusCode, string(b))
 	}
 	return nil
 }

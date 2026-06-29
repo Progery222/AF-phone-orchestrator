@@ -24,6 +24,7 @@ type PhoneLock interface {
 }
 
 type ConnectorClient interface {
+	ListDevices(ctx context.Context) ([]domain.Phone, error)
 	Connect(ctx context.Context, serial string) error
 	GetStatus(ctx context.Context, serial string) (domain.Phone, error)
 	EnableWiFi(ctx context.Context, serial, ssid, password string) error

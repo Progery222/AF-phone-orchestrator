@@ -12,6 +12,15 @@ type StubConnector struct{}
 
 func NewStubConnector() *StubConnector { return &StubConnector{} }
 
+func (s *StubConnector) ListDevices(context.Context) ([]domain.Phone, error) {
+	return []domain.Phone{{
+		Serial:  "stub",
+		State:   domain.StateWorking,
+		Model:   "stub",
+		AdbPort: 5555,
+	}}, nil
+}
+
 func (s *StubConnector) Connect(_ context.Context, serial string) error {
 	_ = serial
 	return nil
