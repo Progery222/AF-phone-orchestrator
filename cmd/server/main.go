@@ -68,7 +68,8 @@ func main() {
 	phones := service.NewPhoneService(store, cfg.PhoneAllowlist)
 
 	orchHandler := handler.NewOrchestratorHandler(flow, logger)
-	phonesHTTP := handler.NewPhonesHTTP(phones, orch, connector, observer, executor, content, contacts, video, scenarios)
+	scenarioRunner := service.NewScenarioRunner(executor, observer, video, content, scenarios, store, logger)
+	phonesHTTP := handler.NewPhonesHTTP(phones, orch, connector, observer, executor, content, contacts, video, scenarios, scenarioRunner)
 
 	grpcServer := grpc.NewServer()
 	orchHandler.Register(grpcServer)

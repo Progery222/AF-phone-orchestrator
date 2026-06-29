@@ -15,19 +15,20 @@ import (
 )
 
 type PhonesHTTP struct {
-	phones       *service.PhoneService
-	orchestrator *service.OrchestratorService
-	connector    port.ConnectorClient
-	observer     port.ObserverClient
-	executor     port.ExecutorClient
-	content      port.ContentClient
-	contacts     port.ContactsClient
-	video        port.VideoClient
-	scenarios    port.ScenariosClient
+	phones         *service.PhoneService
+	orchestrator   *service.OrchestratorService
+	connector      port.ConnectorClient
+	observer       port.ObserverClient
+	executor       port.ExecutorClient
+	content        port.ContentClient
+	contacts       port.ContactsClient
+	video          port.VideoClient
+	scenarios      port.ScenariosClient
+	scenarioRunner *service.ScenarioRunner
 }
 
-func NewPhonesHTTP(phones *service.PhoneService, orchestrator *service.OrchestratorService, connector port.ConnectorClient, observer port.ObserverClient, executor port.ExecutorClient, content port.ContentClient, contacts port.ContactsClient, video port.VideoClient, scenarios port.ScenariosClient) *PhonesHTTP {
-	return &PhonesHTTP{phones: phones, orchestrator: orchestrator, connector: connector, observer: observer, executor: executor, content: content, contacts: contacts, video: video, scenarios: scenarios}
+func NewPhonesHTTP(phones *service.PhoneService, orchestrator *service.OrchestratorService, connector port.ConnectorClient, observer port.ObserverClient, executor port.ExecutorClient, content port.ContentClient, contacts port.ContactsClient, video port.VideoClient, scenarios port.ScenariosClient, scenarioRunner *service.ScenarioRunner) *PhonesHTTP {
+	return &PhonesHTTP{phones: phones, orchestrator: orchestrator, connector: connector, observer: observer, executor: executor, content: content, contacts: contacts, video: video, scenarios: scenarios, scenarioRunner: scenarioRunner}
 }
 
 func (h *PhonesHTTP) Register(mux *http.ServeMux) {
@@ -888,20 +889,53 @@ func (h *PhonesHTTP) phoneScenarios(w http.ResponseWriter, r *http.Request, seri
 			http.Error(w, "только POST", http.StatusMethodNotAllowed)
 			return
 		}
+		if h.scenarioRunner == nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "scenario runner не настроен"})
+			return
+		}
 		var body struct {
-			ScenarioID string            `json:"scenario_id"`
-			StepID     string            `json:"step_id"`
-			Action     string            `json:"action"`
-			Params     map[string]string `json:"params"`
+			ScenarioID     string            `json:"scenario_id"`
+			StepID         string            `json:"step_id"`
+			Action         string            `json:"action"`
+			Params         map[string]string `json:"params"`
+			Uses           string            `json:"uses"`
+			VariablesYAML  string            `json:"variables_yaml"`
+			ScenarioYAML   string            `json:"scenario_yaml"`
+			ScreenshotKeys []string          `json:"screenshot_keys"`
+			VideoOutputKey string            `json:"video_output_key"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ScenarioID == "" || body.StepID == "" {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "укажите scenario_id и step_id"})
 			return
 		}
+		action := body.Action
+		if action == "" {
+			action = body.Params["action"]
+		}
+		result, err := h.scenarioRunner.RunStep(ctx, service.ScenarioStepRequest{
+			Serial:         serial,
+			ScenarioID:     body.ScenarioID,
+			StepID:         body.StepID,
+			Action:         action,
+			Params:         body.Params,
+			Uses:           body.Uses,
+			VariablesYAML:  body.VariablesYAML,
+			ScenarioYAML:   body.ScenarioYAML,
+			ScreenshotKeys: body.ScreenshotKeys,
+			VideoOutputKey: body.VideoOutputKey,
+		})
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]any{
+				"serial": serial, "scenario_id": body.ScenarioID, "step_id": body.StepID,
+				"status": "failed", "error": err.Error(), "result": result,
+			})
+			return
+		}
 		writeJSON(w, http.StatusOK, map[string]any{
 			"serial": serial, "scenario_id": body.ScenarioID, "step_id": body.StepID,
-			"action": body.Action, "status": "accepted",
-			"message": "шаг сценария принят (stub: полное исполнение — в разработке)",
+			"action": action, "status": result.Status, "message": result.Message,
+			"screenshot_keys": result.ScreenshotKeys, "video_job_id": result.VideoJobID,
+			"video_output_key": result.VideoOutputKey, "duration_sec": result.DurationSec,
 		})
 		return
 	}

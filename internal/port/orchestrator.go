@@ -31,5 +31,7 @@ type ExecutorClient interface {
 	Swipe(ctx context.Context, serial string, x0, y0, x1, y1 int32) (domain.ExecutorActionResult, error)
 	TypeText(ctx context.Context, serial string, text string) (domain.ExecutorActionResult, error)
 	Key(ctx context.Context, serial string, key string) (domain.ExecutorActionResult, error)
+	LaunchPackage(ctx context.Context, serial, packageName string) error
+	ForceStopPackage(ctx context.Context, serial, packageName string) error
 	Ping(ctx context.Context) error
 }

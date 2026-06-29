@@ -42,6 +42,18 @@ func (s *StubExecutor) Key(_ context.Context, serial string, key string) (domain
 	}, nil
 }
 
+func (s *StubExecutor) LaunchPackage(_ context.Context, serial, packageName string) error {
+	_ = serial
+	_ = packageName
+	return nil
+}
+
+func (s *StubExecutor) ForceStopPackage(_ context.Context, serial, packageName string) error {
+	_ = serial
+	_ = packageName
+	return nil
+}
+
 func (s *StubExecutor) Ping(context.Context) error { return nil }
 
 var _ port.ExecutorClient = (*StubExecutor)(nil)

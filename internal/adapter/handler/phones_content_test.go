@@ -22,7 +22,7 @@ func newPhonesHTTPWithContent(content port.ContentClient) *handler.PhonesHTTP {
 		store, repository.NewMemoryPhoneLock(), driver.NewStubConnector(),
 		driver.NewStubProvisioner(), nil, repository.NewNoopEventPublisher(), nil, 30, 1,
 	)
-	return handler.NewPhonesHTTP(phones, orch, driver.NewStubConnector(), nil, nil, content, driver.NewStubContacts(), driver.NewStubVideo(), driver.NewStubScenarios())
+	return handler.NewPhonesHTTP(phones, orch, driver.NewStubConnector(), nil, nil, content, driver.NewStubContacts(), driver.NewStubVideo(), driver.NewStubScenarios(), nil)
 }
 
 func TestPhonesHTTP_ContentRegisterAndList(t *testing.T) {

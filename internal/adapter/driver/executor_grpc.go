@@ -85,6 +85,30 @@ func (e *ExecutorGRPC) Key(ctx context.Context, serial string, key string) (doma
 	return fromProtoResult(res), resultError(res)
 }
 
+func (e *ExecutorGRPC) LaunchPackage(ctx context.Context, serial, packageName string) error {
+	res, err := e.client.LaunchApp(ctx, &executorv1.LaunchAppRequest{
+		IdempotencyKey: idempotencyKey(serial, "launch"),
+		Serial:         serial,
+		PackageName:    packageName,
+	})
+	if err != nil {
+		return err
+	}
+	return resultError(res)
+}
+
+func (e *ExecutorGRPC) ForceStopPackage(ctx context.Context, serial, packageName string) error {
+	res, err := e.client.ForceStopApp(ctx, &executorv1.ForceStopAppRequest{
+		IdempotencyKey: idempotencyKey(serial, "force-stop"),
+		Serial:         serial,
+		PackageName:    packageName,
+	})
+	if err != nil {
+		return err
+	}
+	return resultError(res)
+}
+
 func (e *ExecutorGRPC) ExecutePlan(ctx context.Context, serial string, steps []domain.SolutionStep) error {
 	actions := make([]*executorv1.Action, 0, len(steps))
 	for _, step := range steps {

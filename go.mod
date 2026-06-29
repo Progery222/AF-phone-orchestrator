@@ -12,6 +12,7 @@ require (
 	github.com/nats-io/nats-server/v2 v2.14.2
 	github.com/nats-io/nats.go v1.52.0
 	google.golang.org/grpc v1.81.1
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 replace github.com/mobilefarm/af/phone-action-executor => ../AF-phone-action-executor

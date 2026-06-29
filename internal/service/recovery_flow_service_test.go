@@ -63,6 +63,8 @@ func (stubExecutor) TypeText(context.Context, string, string) (domain.ExecutorAc
 func (stubExecutor) Key(context.Context, string, string) (domain.ExecutorActionResult, error) {
 	return domain.ExecutorActionResult{Action: "key", Status: "ok"}, nil
 }
+func (stubExecutor) LaunchPackage(context.Context, string, string) error  { return nil }
+func (stubExecutor) ForceStopPackage(context.Context, string, string) error { return nil }
 func (stubExecutor) Ping(context.Context) error { return nil }
 
 type nopLogger struct{}
