@@ -52,6 +52,10 @@ func (e *ExecutorGRPC) Swipe(ctx context.Context, serial string, x0, y0, x1, y1 
 		Y0:             y0,
 		X1:             x1,
 		Y1:             y1,
+		Params: &executorv1.GestureParams{
+			DurationMs: 750,
+			Bezier:     true,
+		},
 	})
 	if err != nil {
 		return domain.ExecutorActionResult{}, err

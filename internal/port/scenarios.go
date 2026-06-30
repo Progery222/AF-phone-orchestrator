@@ -13,6 +13,13 @@ type ScenarioSummary struct {
 	Serial     string `json:"serial"`
 	ValidFrom  string `json:"valid_from,omitempty"`
 	ValidUntil string `json:"valid_until,omitempty"`
+	IsActive   bool   `json:"is_active,omitempty"`
+}
+
+type ScenarioListResult struct {
+	Serial           string            `json:"serial"`
+	ActiveScenarioID string            `json:"active_scenario_id,omitempty"`
+	Items            []ScenarioSummary `json:"items"`
 }
 
 type ScenarioStatus struct {
@@ -27,12 +34,15 @@ type ScenarioStatus struct {
 }
 
 type ScenariosClient interface {
-	ListForSerial(ctx context.Context, serial string) ([]ScenarioSummary, error)
+	ListForSerial(ctx context.Context, serial string) (ScenarioListResult, error)
+	SetActiveScenario(ctx context.Context, serial, scenarioID string) error
 	Get(ctx context.Context, serial, scenarioID string) (ScenarioFiles, error)
 	Put(ctx context.Context, serial, scenarioID string, files ScenarioFiles) error
 	Delete(ctx context.Context, serial, scenarioID string) error
 	GetStatus(ctx context.Context, serial, scenarioID string) (ScenarioStatus, error)
 	GetLogs(ctx context.Context, serial, scenarioID, date string) (string, error)
 	Generate(ctx context.Context, serial, prompt string) (ScenarioFiles, []string, error)
+	GenerateFull(ctx context.Context, serial, prompt string) (map[string]any, error)
+	Validate(ctx context.Context, serial, scenarioYAML, variablesYAML string, normalize bool) (map[string]any, error)
 	Ping(ctx context.Context) error
 }

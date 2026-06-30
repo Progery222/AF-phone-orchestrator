@@ -30,6 +30,7 @@ type Config struct {
 	VideoGRPCAddr               string
 	ScenariosHTTPURL            string
 	ScenariosHealthURL          string
+	BehaviorHTTPURL             string
 	NATSURL                     string
 	NATSSubjectRecoveryIn       string
 	NATSSubjectRecoveryOut      string
@@ -69,6 +70,7 @@ func Load() Config {
 		VideoGRPCAddr:               env("VIDEO_GRPC_ADDR", "localhost:50057"),
 		ScenariosHTTPURL:            env("SCENARIOS_HTTP_URL", "http://127.0.0.1:19095"),
 		ScenariosHealthURL:          env("SCENARIOS_HEALTH_URL", "http://127.0.0.1:19098"),
+		BehaviorHTTPURL:             env("BEHAVIOR_HTTP_URL", "http://127.0.0.1:19096"),
 		NATSURL:                     env("NATS_URL", "nats://localhost:4222"),
 		NATSSubjectRecoveryIn:       env("NATS_SUBJECT_RECOVERY_IN", "af.recovery.request"),
 		NATSSubjectRecoveryOut:      env("NATS_SUBJECT_RECOVERY_OUT", "af.recovery.response"),

@@ -18,6 +18,7 @@ func (h *PhonesHTTP) phoneApps(w http.ResponseWriter, r *http.Request, serial st
 		system := domain.PhoneAppsByCategory("system")
 		writeJSON(w, http.StatusOK, map[string]any{
 			"serial": serial,
+			"apps":   domain.PhoneAppsList(),
 			"social": social,
 			"system": system,
 		})

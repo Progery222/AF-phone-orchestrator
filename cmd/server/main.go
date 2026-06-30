@@ -59,6 +59,9 @@ func main() {
 	scenarios, closeScenarios := openScenarios(cfg, logger)
 	defer closeScenarios()
 
+	behavior, closeBehavior := openBehavior(cfg, logger)
+	defer closeBehavior()
+
 	lock := repository.NewMemoryPhoneLock()
 	flow := service.NewRecoveryFlowService(observer, recovery, executor, logger)
 	orch := service.NewOrchestratorService(
@@ -68,7 +71,7 @@ func main() {
 	phones := service.NewPhoneService(store, cfg.PhoneAllowlist)
 
 	orchHandler := handler.NewOrchestratorHandler(flow, logger)
-	scenarioRunner := service.NewScenarioRunner(executor, observer, video, content, scenarios, store, logger)
+	scenarioRunner := service.NewScenarioRunner(executor, observer, video, content, scenarios, behavior, store, logger)
 	phonesHTTP := handler.NewPhonesHTTP(phones, orch, connector, observer, executor, content, contacts, video, scenarios, scenarioRunner)
 
 	grpcServer := grpc.NewServer()
@@ -256,4 +259,17 @@ func openScenarios(cfg config.Config, log *slog.Logger) (port.ScenariosClient, f
 	}
 	log.Info("AF-scenarios http client", "url", cfg.ScenariosHTTPURL)
 	return driver.NewScenariosHTTP(cfg), func() {}
+}
+
+func openBehavior(cfg config.Config, log *slog.Logger) (port.BehaviorClient, func()) {
+	if strings.EqualFold(os.Getenv("BEHAVIOR_MODE"), "stub") {
+		log.Warn("behavior-engine stub mode (BEHAVIOR_MODE=stub)")
+		return driver.NewStubBehavior(), func() {}
+	}
+	if cfg.BehaviorHTTPURL == "" {
+		log.Warn("BEHAVIOR_HTTP_URL пуст, behavior stub")
+		return driver.NewStubBehavior(), func() {}
+	}
+	log.Info("behavior-engine http client", "url", cfg.BehaviorHTTPURL)
+	return driver.NewBehaviorHTTP(cfg), func() {}
 }

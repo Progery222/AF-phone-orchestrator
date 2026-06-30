@@ -860,12 +860,61 @@ func (h *PhonesHTTP) phoneScenarios(w http.ResponseWriter, r *http.Request, seri
 			http.Error(w, "только GET", http.StatusMethodNotAllowed)
 			return
 		}
-		items, err := h.scenarios.ListForSerial(ctx, serial)
+		list, err := h.scenarios.ListForSerial(ctx, serial)
 		if err != nil {
 			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"serial": serial, "items": items})
+		writeJSON(w, http.StatusOK, list)
+		return
+	}
+	if sub[0] == "active" {
+		switch r.Method {
+		case http.MethodGet:
+			list, err := h.scenarios.ListForSerial(ctx, serial)
+			if err != nil {
+				writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]string{"serial": serial, "active_scenario_id": list.ActiveScenarioID})
+		case http.MethodPut:
+			var body struct {
+				ScenarioID string `json:"scenario_id"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ScenarioID == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "укажите scenario_id"})
+				return
+			}
+			if err := h.scenarios.SetActiveScenario(ctx, serial, body.ScenarioID); err != nil {
+				writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]string{"message": "активный сценарий установлен", "active_scenario_id": body.ScenarioID})
+		default:
+			http.Error(w, "GET/PUT active", http.StatusMethodNotAllowed)
+		}
+		return
+	}
+	if sub[0] == "validate" {
+		if r.Method != http.MethodPost {
+			http.Error(w, "только POST", http.StatusMethodNotAllowed)
+			return
+		}
+		var body struct {
+			ScenarioYAML  string `json:"scenario_yaml"`
+			VariablesYAML string `json:"variables_yaml"`
+			Normalize     bool   `json:"normalize"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ScenarioYAML == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "укажите scenario_yaml"})
+			return
+		}
+		result, err := h.scenarios.Validate(ctx, serial, body.ScenarioYAML, body.VariablesYAML, body.Normalize)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, result)
 		return
 	}
 	if sub[0] == "generate" {
@@ -880,14 +929,12 @@ func (h *PhonesHTTP) phoneScenarios(w http.ResponseWriter, r *http.Request, seri
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "укажите prompt"})
 			return
 		}
-		files, warnings, err := h.scenarios.Generate(ctx, serial, body.Prompt)
+		payload, err := h.scenarios.GenerateFull(ctx, serial, body.Prompt)
 		if err != nil {
 			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{
-			"scenario_yaml": files.ScenarioYAML, "variables_yaml": files.VariablesYAML, "warnings": warnings,
-		})
+		writeJSON(w, http.StatusOK, payload)
 		return
 	}
 	if sub[0] == "run-step" {
@@ -918,15 +965,39 @@ func (h *PhonesHTTP) phoneScenarios(w http.ResponseWriter, r *http.Request, seri
 		if action == "" {
 			action = body.Params["action"]
 		}
+		params := body.Params
+		if params == nil {
+			params = map[string]string{}
+		}
+		scenarioYAML := body.ScenarioYAML
+		if scenarioYAML == "" && h.scenarios != nil {
+			files, err := h.scenarios.Get(ctx, serial, body.ScenarioID)
+			if err == nil {
+				scenarioYAML = files.ScenarioYAML
+				if body.VariablesYAML == "" {
+					body.VariablesYAML = files.VariablesYAML
+				}
+			}
+		}
+		var mergeErr error
+		action, body.Uses, params, mergeErr = service.MergeStepRequest(scenarioYAML, body.StepID, action, body.Uses, params)
+		if mergeErr != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": mergeErr.Error()})
+			return
+		}
+		if action == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "укажите action или корректный step_id в scenario.yaml"})
+			return
+		}
 		result, err := h.scenarioRunner.RunStep(ctx, service.ScenarioStepRequest{
 			Serial:         serial,
 			ScenarioID:     body.ScenarioID,
 			StepID:         body.StepID,
 			Action:         action,
-			Params:         body.Params,
+			Params:         params,
 			Uses:           body.Uses,
 			VariablesYAML:  body.VariablesYAML,
-			ScenarioYAML:   body.ScenarioYAML,
+			ScenarioYAML:   scenarioYAML,
 			ScreenshotKeys: body.ScreenshotKeys,
 			VideoOutputKey: body.VideoOutputKey,
 		})

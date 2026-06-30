@@ -33,14 +33,31 @@ func NewScenariosHTTP(cfg config.Config) *ScenariosHTTP {
 	}
 }
 
-func (c *ScenariosHTTP) ListForSerial(ctx context.Context, serial string) ([]port.ScenarioSummary, error) {
-	var out struct {
-		Items []port.ScenarioSummary `json:"items"`
-	}
+func (c *ScenariosHTTP) ListForSerial(ctx context.Context, serial string) (port.ScenarioListResult, error) {
+	var out port.ScenarioListResult
 	if err := c.getJSON(ctx, c.baseURL+"/scenarios/"+serial, &out); err != nil {
-		return nil, err
+		return port.ScenarioListResult{}, err
 	}
-	return out.Items, nil
+	return out, nil
+}
+
+func (c *ScenariosHTTP) SetActiveScenario(ctx context.Context, serial, scenarioID string) error {
+	body, _ := json.Marshal(map[string]string{"scenario_id": scenarioID})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, c.baseURL+"/scenarios/"+serial+"/active", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("scenarios active PUT HTTP %d: %s", resp.StatusCode, string(b))
+	}
+	return nil
 }
 
 func (c *ScenariosHTTP) Get(ctx context.Context, serial, scenarioID string) (port.ScenarioFiles, error) {
@@ -122,14 +139,67 @@ func (c *ScenariosHTTP) Generate(ctx context.Context, serial, prompt string) (po
 		return port.ScenarioFiles{}, nil, fmt.Errorf("scenarios generate HTTP %d: %s", resp.StatusCode, string(b))
 	}
 	var out struct {
-		ScenarioYAML  string   `json:"scenario_yaml"`
-		VariablesYAML string   `json:"variables_yaml"`
-		Warnings      []string `json:"warnings"`
+		ScenarioYAML  string                   `json:"scenario_yaml"`
+		VariablesYAML string                   `json:"variables_yaml"`
+		Warnings      []string                 `json:"warnings"`
+		StepIssues    []map[string]interface{} `json:"step_issues"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return port.ScenarioFiles{}, nil, err
 	}
 	return port.ScenarioFiles{ScenarioYAML: out.ScenarioYAML, VariablesYAML: out.VariablesYAML}, out.Warnings, nil
+}
+
+// GenerateFull — полный ответ /scenarios/generate (warnings, step_issues).
+func (c *ScenariosHTTP) GenerateFull(ctx context.Context, serial, prompt string) (map[string]any, error) {
+	body, _ := json.Marshal(map[string]string{"serial": serial, "prompt": prompt})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/scenarios/generate", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		b, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("scenarios generate HTTP %d: %s", resp.StatusCode, string(b))
+	}
+	var out map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *ScenariosHTTP) Validate(ctx context.Context, serial, scenarioYAML, variablesYAML string, normalize bool) (map[string]any, error) {
+	body, _ := json.Marshal(map[string]any{
+		"serial":          serial,
+		"scenario_yaml":   scenarioYAML,
+		"variables_yaml":  variablesYAML,
+		"normalize":       normalize,
+	})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/scenarios/validate", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		b, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("scenarios validate HTTP %d: %s", resp.StatusCode, string(b))
+	}
+	var out map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *ScenariosHTTP) Ping(ctx context.Context) error {
@@ -169,9 +239,11 @@ type StubScenarios struct{}
 
 func NewStubScenarios() *StubScenarios { return &StubScenarios{} }
 
-func (s *StubScenarios) ListForSerial(_ context.Context, serial string) ([]port.ScenarioSummary, error) {
-	return []port.ScenarioSummary{}, nil
+func (s *StubScenarios) ListForSerial(_ context.Context, serial string) (port.ScenarioListResult, error) {
+	return port.ScenarioListResult{Serial: serial, Items: []port.ScenarioSummary{}}, nil
 }
+
+func (s *StubScenarios) SetActiveScenario(context.Context, string, string) error { return nil }
 
 func (s *StubScenarios) Get(_ context.Context, serial, scenarioID string) (port.ScenarioFiles, error) {
 	return port.ScenarioFiles{
@@ -197,6 +269,22 @@ func (s *StubScenarios) Generate(_ context.Context, serial, prompt string) (port
 		ScenarioYAML:  fmt.Sprintf("id: generated\nserial: %s\nname: %q\n", serial, prompt),
 		VariablesYAML: "# generated\n",
 	}, []string{"stub mode"}, nil
+}
+
+func (s *StubScenarios) GenerateFull(_ context.Context, serial, prompt string) (map[string]any, error) {
+	files, warnings, _ := s.Generate(context.Background(), serial, prompt)
+	return map[string]any{
+		"scenario_yaml":            files.ScenarioYAML,
+		"variables_yaml":           files.VariablesYAML,
+		"normalized_scenario_yaml": files.ScenarioYAML,
+		"warnings":                 warnings,
+		"valid":                    true,
+		"runnable_by_scheduler":    true,
+	}, nil
+}
+
+func (s *StubScenarios) Validate(_ context.Context, serial, scenarioYAML, variablesYAML string, normalize bool) (map[string]any, error) {
+	return map[string]any{"valid": true, "warnings": []string{"stub mode"}}, nil
 }
 
 func (s *StubScenarios) Ping(context.Context) error { return nil }

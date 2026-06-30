@@ -31,13 +31,27 @@ func TestPhoneApps_ListAndOpen(t *testing.T) {
 		t.Fatalf("list apps: %d %s", rec.Code, rec.Body.String())
 	}
 	var list struct {
-		Social []struct{ Package string `json:"package"` }
+		Social []struct {
+			Package string `json:"package"`
+		}
+		System []struct {
+			Package string `json:"package"`
+		}
+		Apps []struct {
+			Package string `json:"package"`
+		}
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
 		t.Fatal(err)
 	}
 	if len(list.Social) == 0 {
 		t.Fatal("expected social apps")
+	}
+	if len(list.System) == 0 {
+		t.Fatal("expected system apps")
+	}
+	if len(list.Apps) == 0 {
+		t.Fatal("expected apps")
 	}
 
 	body, _ := json.Marshal(map[string]string{"package": "com.zhiliaoapp.musically"})

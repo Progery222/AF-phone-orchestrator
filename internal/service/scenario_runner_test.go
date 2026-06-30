@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"math/rand"
 	"testing"
 
 	"github.com/mobilefarm/af/phone-orchestrator/internal/adapter/driver"
@@ -24,6 +25,7 @@ func TestScenarioRunner_Wait(t *testing.T) {
 		driver.NewStubVideo(),
 		driver.NewStubContent(),
 		driver.NewStubScenarios(),
+		driver.NewStubBehavior(),
 		store,
 		testLogger{},
 	)
@@ -41,13 +43,14 @@ func TestScenarioRunner_Wait(t *testing.T) {
 
 func TestScenarioRunner_OpenApp(t *testing.T) {
 	store := repository.NewMemoryPhoneStore()
-	_ = store.Save(context.Background(), domain.Phone{Serial: "stub", ScreenResX: 1080, ScreenResY: 1920})
+	_ = store.Save(context.Background(), domain.Phone{Serial: "stub", State: domain.StateWorking, ScreenResX: 1080, ScreenResY: 1920})
 	runner := NewScenarioRunner(
 		driver.NewStubExecutor(),
 		driver.NewStubObserver(),
 		driver.NewStubVideo(),
 		driver.NewStubContent(),
 		driver.NewStubScenarios(),
+		driver.NewStubBehavior(),
 		store,
 		testLogger{},
 	)
@@ -78,5 +81,51 @@ func TestParseScenarioVariables(t *testing.T) {
 	}
 	if v.WarmupFeed == nil {
 		t.Fatal("expected warmup_feed")
+	}
+}
+
+func TestMergeWarmupFeedVars_ProfilePhase(t *testing.T) {
+	raw := `warmup_profiles:
+  tiktok_daily:
+    pre_publish:
+      duration_sec: [55, 65]
+warmup_feed:
+  scroll_interval_sec: [3, 12]
+`
+	v, err := parseScenarioVariables(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	merged := mergeWarmupFeedVars(v, "tiktok_daily", "pre_publish")
+	rng := rand.New(rand.NewSource(1))
+	d := pickRange(rng, merged["duration_sec"], 300)
+	if d < 55 || d > 65 {
+		t.Fatalf("duration_sec=%d want 55-65", d)
+	}
+	interval := pickRange(rng, merged["scroll_interval_sec"], 0)
+	if interval < 3 || interval > 12 {
+		t.Fatalf("scroll_interval_sec=%d want 3-12", interval)
+	}
+}
+
+func TestParseScenarioVariables_MisplacedWarmupProfileKeys(t *testing.T) {
+	raw := `warmup_profiles:
+  like_probability: [0, 0]
+  scroll_interval_sec: [3, 12]
+  tiktok_daily:
+    pre_publish:
+      duration_sec: [55, 65]
+warmup_feed:
+  scroll_interval_sec: [3, 12]
+`
+	v, err := parseScenarioVariables(raw)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if v.WarmupProfiles == nil {
+		t.Fatal("warmup_profiles missing")
+	}
+	if _, ok := v.WarmupProfiles["tiktok_daily"]; !ok {
+		t.Fatal("tiktok_daily profile missing")
 	}
 }

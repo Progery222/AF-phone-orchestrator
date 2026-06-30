@@ -3,12 +3,11 @@ package driver
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
-	videov1 "github.com/mobilefarm/af/video-generator/gen/video/v1"
 	"github.com/mobilefarm/af/phone-orchestrator/internal/config"
 	"github.com/mobilefarm/af/phone-orchestrator/internal/port"
+	videov1 "github.com/mobilefarm/af/video-generator/gen/video/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -30,17 +29,7 @@ func NewVideoGRPC(cfg config.Config) (*VideoGRPC, func(), error) {
 }
 
 func (c *VideoGRPC) CreateFromScreenshots(ctx context.Context, serial string, keys []string, audioKey, overlay string, profile port.VideoOutputProfile) (port.VideoJob, error) {
-	job, err := c.client.CreateFromScreenshots(ctx, &videov1.CreateFromScreenshotsRequest{
-		Serial:          serial,
-		ScreenshotKeys:  keys,
-		AudioKey:        audioKey,
-		OverlayText:     overlay,
-		Profile:         toProtoProfile(profile),
-	})
-	if err != nil {
-		return port.VideoJob{}, err
-	}
-	return fromProtoJob(job), nil
+	return port.VideoJob{}, fmt.Errorf("video-generator grpc CreateFromScreenshots is unsupported by current video API")
 }
 
 func (c *VideoGRPC) GenerateAI(ctx context.Context, serial, prompt, provider string, durationSec float64, profile port.VideoOutputProfile) (port.VideoJob, error) {
@@ -58,25 +47,7 @@ func (c *VideoGRPC) GenerateAI(ctx context.Context, serial, prompt, provider str
 }
 
 func (c *VideoGRPC) EditVideo(ctx context.Context, serial, sourceKey string, ops []port.VideoEditOp) (port.VideoJob, error) {
-	specs := make([]*videov1.EditOperationSpec, 0, len(ops))
-	for _, op := range ops {
-		specs = append(specs, &videov1.EditOperationSpec{
-			Op:       parseEditOp(op.Op),
-			TrimSec:  op.TrimSec,
-			Crf:      int32(op.CRF),
-			AudioKey: op.AudioKey,
-			Scale:    toProtoProfile(op.Scale),
-		})
-	}
-	job, err := c.client.EditVideo(ctx, &videov1.EditVideoRequest{
-		Serial:     serial,
-		SourceKey:  sourceKey,
-		Operations: specs,
-	})
-	if err != nil {
-		return port.VideoJob{}, err
-	}
-	return fromProtoJob(job), nil
+	return port.VideoJob{}, fmt.Errorf("video-generator grpc EditVideo is unsupported by current video API")
 }
 
 func (c *VideoGRPC) GetJob(ctx context.Context, id string) (port.VideoJob, error) {
@@ -129,22 +100,6 @@ func toProtoProfile(p port.VideoOutputProfile) *videov1.OutputProfile {
 		Width:       int32(p.Width),
 		Height:      int32(p.Height),
 		DurationSec: p.DurationSec,
-		FrameSec:    p.FrameSec,
-	}
-}
-
-func parseEditOp(raw string) videov1.EditOperation {
-	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "trim", "edit_operation_trim":
-		return videov1.EditOperation_EDIT_OPERATION_TRIM
-	case "compress", "edit_operation_compress":
-		return videov1.EditOperation_EDIT_OPERATION_COMPRESS
-	case "scale", "edit_operation_scale":
-		return videov1.EditOperation_EDIT_OPERATION_SCALE
-	case "mux_audio", "edit_operation_mux_audio":
-		return videov1.EditOperation_EDIT_OPERATION_MUX_AUDIO
-	default:
-		return videov1.EditOperation_EDIT_OPERATION_UNSPECIFIED
 	}
 }
 

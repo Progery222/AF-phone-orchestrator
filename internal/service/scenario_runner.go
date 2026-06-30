@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"regexp"
@@ -48,6 +49,7 @@ type ScenarioRunner struct {
 	video     port.VideoClient
 	content   port.ContentClient
 	scenarios port.ScenariosClient
+	behavior  port.BehaviorClient
 	phones    port.PhoneStore
 	log       port.Logger
 }
@@ -58,12 +60,13 @@ func NewScenarioRunner(
 	video port.VideoClient,
 	content port.ContentClient,
 	scenarios port.ScenariosClient,
+	behavior port.BehaviorClient,
 	phones port.PhoneStore,
 	log port.Logger,
 ) *ScenarioRunner {
 	return &ScenarioRunner{
 		executor: executor, observer: observer, video: video, content: content,
-		scenarios: scenarios, phones: phones, log: log,
+		scenarios: scenarios, behavior: behavior, phones: phones, log: log,
 	}
 }
 
@@ -86,6 +89,10 @@ func (r *ScenarioRunner) RunStep(ctx context.Context, req ScenarioStepRequest) (
 		}
 	}
 	phone, _ := r.phones.Get(ctx, req.Serial)
+	if phone.Serial != "" && phone.State != "" && phone.State != domain.StateWorking && phone.State != domain.StateReady {
+		err := fmt.Errorf("телефон в состоянии %q — шаг сценария невозможен (нужен working/ready)", phone.State)
+		return ScenarioStepResult{Status: "failed", Error: err.Error()}, err
+	}
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	var result ScenarioStepResult
@@ -104,6 +111,10 @@ func (r *ScenarioRunner) RunStep(ctx context.Context, req ScenarioStepRequest) (
 		result, err = r.actionCreateVideo(ctx, req, phone)
 	case "publish_content":
 		result, err = r.actionPublishContent(ctx, req, vars, phone, rng)
+	case "social_action":
+		result, err = r.actionSocialAction(ctx, req)
+	case "custom_execute":
+		result, err = r.actionCustomExecute(ctx, req)
 	default:
 		err = fmt.Errorf("неизвестное действие: %s", req.Action)
 		result = ScenarioStepResult{Status: "failed", Error: err.Error()}
@@ -160,17 +171,28 @@ func (r *ScenarioRunner) actionCloseApp(ctx context.Context, req ScenarioStepReq
 	pkg := req.Params["package"]
 	if pkg != "" {
 		if err := r.executor.ForceStopPackage(ctx, req.Serial, pkg); err != nil {
+			r.log.Warn("force-stop failed, fallback back/home", "package", pkg, "error", err)
+			return r.closeAppViaKeys(ctx, req.Serial)
+		}
+		time.Sleep(500 * time.Millisecond)
+		if _, err := r.executor.Key(ctx, req.Serial, "home"); err != nil {
 			return ScenarioStepResult{}, err
 		}
-		return ScenarioStepResult{Status: "completed", Message: "force-stop: " + pkg}, nil
+		return ScenarioStepResult{Status: "completed", Message: "force-stop + home: " + pkg}, nil
 	}
+	return r.closeAppViaKeys(ctx, req.Serial)
+}
+
+func (r *ScenarioRunner) closeAppViaKeys(ctx context.Context, serial string) (ScenarioStepResult, error) {
 	for i := 0; i < 5; i++ {
-		if _, err := r.executor.Key(ctx, req.Serial, "back"); err != nil {
+		if _, err := r.executor.Key(ctx, serial, "back"); err != nil {
 			return ScenarioStepResult{}, err
 		}
 		time.Sleep(400 * time.Millisecond)
 	}
-	_, _ = r.executor.Key(ctx, req.Serial, "home")
+	if _, err := r.executor.Key(ctx, serial, "home"); err != nil {
+		return ScenarioStepResult{}, err
+	}
 	return ScenarioStepResult{Status: "completed", Message: "closed via back/home"}, nil
 }
 
@@ -180,24 +202,17 @@ func (r *ScenarioRunner) actionWarmupFeed(
 	profile := req.Params["profile"]
 	phase := req.Params["phase"]
 	until := req.Params["until"]
+	feedVars := mergeWarmupFeedVars(vars, profile, phase)
 
-	var cfg map[string]any
-	if profile != "" && phase != "" && vars.WarmupProfiles != nil {
-		if p, ok := vars.WarmupProfiles[profile]; ok {
-			if ph, ok := p[phase].(map[string]any); ok {
-				cfg = ph
-			}
+	durationSec := 60
+	if raw := strings.TrimSpace(req.Params["duration_sec"]); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			durationSec = n
 		}
-	}
-	feedVars := map[string]any{}
-	for k, v := range vars.WarmupFeed {
-		feedVars[k] = v
-	}
-	for k, v := range cfg {
-		feedVars[k] = v
+	} else if d := pickRange(rng, feedVars["duration_sec"], 0); d > 0 {
+		durationSec = d
 	}
 
-	durationSec := pickRange(rng, feedVars["duration_sec"], 300)
 	deadline := time.Now().Add(time.Duration(durationSec) * time.Second)
 	if until != "" {
 		if t, err := time.Parse("15:04", until); err == nil {
@@ -209,38 +224,85 @@ func (r *ScenarioRunner) actionWarmupFeed(
 		}
 	}
 
-	likesMax := pickRange(rng, feedVars["likes_max"], 2)
+	likesMax := pickRange(rng, feedVars["likes_max"], 0)
 	likesDone := 0
-	likeProb := pickFloatRange(rng, feedVars["like_probability"], 0.08)
+	likeProb := pickFloatRange(rng, feedVars["like_probability"], 0)
+	likesEnabled := likesMax > 0 && likeProb > 0
 
 	w, h := portraitSize(phone.ScreenResX, phone.ScreenResY)
 	swipes := 0
+
+	// Первое видео после open_app — короткий просмотр перед свайпами.
+	if err := sleepCtx(ctx, time.Duration(pickRange(rng, feedVars["initial_view_sec"], 3))*time.Second); err != nil {
+		return ScenarioStepResult{}, err
+	}
+
 	for time.Now().Before(deadline) {
 		if err := ctx.Err(); err != nil {
 			return ScenarioStepResult{}, err
 		}
-		x0, y0, x1, y1 := scaleSwipe(refScreenW/2, refScreenH*1650/1920, refScreenW/2, refScreenH*450/1920, w, h)
-		if _, err := r.executor.Swipe(ctx, req.Serial, x0, y0, x1, y1); err != nil {
+
+		if err := r.tiktokFeedSwipeUp(ctx, req.Serial, w, h); err != nil {
 			return ScenarioStepResult{}, err
 		}
 		swipes++
-		viewSec := pickRange(rng, feedVars["view_duration_sec"], 8)
-		time.Sleep(time.Duration(viewSec) * time.Second)
 
-		if likesDone < likesMax && rng.Float64() < likeProb {
+		watchSec := pickRange(rng, feedVars["scroll_interval_sec"], 0)
+		if watchSec <= 0 {
+			watchSec = pickRange(rng, feedVars["view_duration_sec"], 6)
+		}
+		if watchSec <= 0 {
+			watchSec = 6
+		}
+		if err := sleepCtx(ctx, time.Duration(watchSec)*time.Second); err != nil {
+			return ScenarioStepResult{}, err
+		}
+
+		if likesEnabled && likesDone < likesMax && rng.Float64() < likeProb {
 			lx, ly := scalePoint(refScreenW*920/1080, refScreenH*1100/1920, w, h)
 			if _, err := r.executor.Tap(ctx, req.Serial, lx, ly); err == nil {
 				likesDone++
+				cooldown := pickRange(rng, feedVars["like_cooldown_sec"], 12)
+				remaining := time.Until(deadline)
+				if time.Duration(cooldown)*time.Second > remaining {
+					cooldown = int(remaining.Seconds())
+				}
+				if err := sleepCtx(ctx, time.Duration(cooldown)*time.Second); err != nil {
+					return ScenarioStepResult{}, err
+				}
 			}
-			time.Sleep(time.Duration(pickRange(rng, feedVars["like_cooldown_sec"], 45)) * time.Second)
 		}
-		pauseMs := pickRange(rng, feedVars["swipe_pause_ms"], 1200)
-		time.Sleep(time.Duration(pauseMs) * time.Millisecond)
+
+		pauseMs := pickRange(rng, feedVars["swipe_pause_ms"], 400)
+		if err := sleepCtx(ctx, time.Duration(pauseMs)*time.Millisecond); err != nil {
+			return ScenarioStepResult{}, err
+		}
 	}
 	return ScenarioStepResult{
 		Status:  "completed",
-		Message: fmt.Sprintf("warmup: %d swipes, %d likes", swipes, likesDone),
+		Message: fmt.Sprintf("warmup: %d swipes, %d likes, %ds", swipes, likesDone, durationSec),
 	}, nil
+}
+
+// tiktokFeedSwipeUp — два медленных свайпа по ленте (как в Controls / tg-bot).
+func (r *ScenarioRunner) tiktokFeedSwipeUp(ctx context.Context, serial string, w, h int32) error {
+	x0, y0, x1, y1 := tiktokFeedSwipeCoords(w, h)
+	for i := 0; i < 2; i++ {
+		if _, err := r.executor.Swipe(ctx, serial, x0, y0, x1, y1); err != nil {
+			return err
+		}
+		if i == 0 {
+			if err := sleepCtx(ctx, 350*time.Millisecond); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func tiktokFeedSwipeCoords(w, h int32) (int32, int32, int32, int32) {
+	// Координаты как feedGestures (1080×1920): центр-лево ленты, мимо кнопок справа.
+	return scaleSwipe(refScreenW*480/1080, refScreenH*1650/1920, refScreenW*480/1080, refScreenH*450/1920, w, h)
 }
 
 func (r *ScenarioRunner) actionBrowserResearch(
@@ -572,4 +634,83 @@ func scaleCoord(value, ref int, size int32) int32 {
 		return size - 1
 	}
 	return v
+}
+
+func (r *ScenarioRunner) actionSocialAction(ctx context.Context, req ScenarioStepRequest) (ScenarioStepResult, error) {
+	if r.behavior == nil {
+		return ScenarioStepResult{}, fmt.Errorf("behavior-engine не настроен")
+	}
+	network := strings.TrimSpace(req.Params["network"])
+	if network == "" {
+		network = "tiktok"
+	}
+	behavior := strings.TrimSpace(req.Params["behavior"])
+	if behavior == "" {
+		behavior = "feed"
+	}
+	body := map[string]any{"serial": req.Serial}
+	for k, v := range req.Params {
+		switch k {
+		case "network", "behavior", "duration_sec":
+			continue
+		case "count":
+			if n, err := strconv.Atoi(v); err == nil {
+				body["count"] = n
+			} else {
+				body["count"] = v
+			}
+		case "like_probability":
+			if f, err := strconv.ParseFloat(v, 64); err == nil {
+				body["like_probability"] = f
+			}
+		case "skip_launch":
+			body["skip_launch"] = strings.EqualFold(v, "true") || v == "1" || strings.EqualFold(v, "yes")
+		default:
+			body[k] = v
+		}
+	}
+	if behavior == "search-feed" {
+		if _, ok := body["skip_launch"]; !ok {
+			body["skip_launch"] = true
+		}
+	}
+	job, err := r.behavior.RunSocialAction(ctx, network, behavior, req.Serial, body)
+	if err != nil {
+		return ScenarioStepResult{}, err
+	}
+	timeout := 10 * time.Minute
+	if ds := req.Params["duration_sec"]; ds != "" {
+		if n, err := strconv.Atoi(ds); err == nil && n > 0 {
+			timeout = time.Duration(n+90) * time.Second
+		}
+	}
+	final, err := r.behavior.WaitJob(ctx, job.ID, timeout)
+	if err != nil {
+		return ScenarioStepResult{Status: "failed", Error: err.Error()}, err
+	}
+	return ScenarioStepResult{
+		Status:  "completed",
+		Message: fmt.Sprintf("social %s/%s job=%s", network, behavior, final.ID),
+	}, nil
+}
+
+func (r *ScenarioRunner) actionCustomExecute(ctx context.Context, req ScenarioStepRequest) (ScenarioStepResult, error) {
+	raw := req.Params["steps_json"]
+	if raw == "" {
+		return ScenarioStepResult{}, fmt.Errorf("params.steps_json обязателен")
+	}
+	var steps []domain.SolutionStep
+	if err := json.Unmarshal([]byte(raw), &steps); err != nil {
+		return ScenarioStepResult{}, fmt.Errorf("steps_json: %w", err)
+	}
+	if len(steps) == 0 {
+		return ScenarioStepResult{}, fmt.Errorf("steps_json пуст")
+	}
+	if err := r.executor.ExecutePlan(ctx, req.Serial, steps); err != nil {
+		return ScenarioStepResult{}, err
+	}
+	return ScenarioStepResult{
+		Status:  "completed",
+		Message: fmt.Sprintf("custom_execute: %d шагов", len(steps)),
+	}, nil
 }
