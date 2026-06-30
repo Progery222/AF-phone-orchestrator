@@ -942,6 +942,26 @@ func (h *PhonesHTTP) phoneScenarios(w http.ResponseWriter, r *http.Request, seri
 		writeJSON(w, http.StatusOK, payload)
 		return
 	}
+	if sub[0] == "run-now" {
+		if r.Method != http.MethodPost {
+			http.Error(w, "только POST", http.StatusMethodNotAllowed)
+			return
+		}
+		var body struct {
+			ScenarioIDs []string `json:"scenario_ids"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || len(body.ScenarioIDs) == 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "укажите scenario_ids"})
+			return
+		}
+		payload, err := h.scenarios.RunNow(ctx, serial, body.ScenarioIDs)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, payload)
+		return
+	}
 	if sub[0] == "run-step" {
 		if r.Method != http.MethodPost {
 			http.Error(w, "только POST", http.StatusMethodNotAllowed)

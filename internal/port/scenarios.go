@@ -57,5 +57,6 @@ type ScenariosClient interface {
 	GenerateFull(ctx context.Context, serial, prompt string) (map[string]any, error)
 	Validate(ctx context.Context, serial, scenarioYAML, variablesYAML string, normalize bool) (map[string]any, error)
 	AppendScenarioLog(ctx context.Context, serial, scenarioID string, entry ScenarioLogEntry) error
+	RunNow(ctx context.Context, serial string, scenarioIDs []string) (map[string]any, error)
 	Ping(ctx context.Context) error
 }

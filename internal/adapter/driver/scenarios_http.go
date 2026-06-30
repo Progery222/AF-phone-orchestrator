@@ -202,6 +202,30 @@ func (c *ScenariosHTTP) Validate(ctx context.Context, serial, scenarioYAML, vari
 	return out, nil
 }
 
+func (c *ScenariosHTTP) RunNow(ctx context.Context, serial string, scenarioIDs []string) (map[string]any, error) {
+	body, _ := json.Marshal(map[string]any{"scenario_ids": scenarioIDs})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/scenarios/"+serial+"/run-now", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	longClient := &http.Client{Timeout: 45 * time.Minute}
+	resp, err := longClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		b, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("scenarios run-now HTTP %d: %s", resp.StatusCode, string(b))
+	}
+	var out map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *ScenariosHTTP) AppendScenarioLog(ctx context.Context, serial, scenarioID string, entry port.ScenarioLogEntry) error {
 	body, _ := json.Marshal(entry)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/scenarios/"+serial+"/"+scenarioID+"/log", bytes.NewReader(body))
@@ -308,6 +332,18 @@ func (s *StubScenarios) Validate(_ context.Context, serial, scenarioYAML, variab
 
 func (s *StubScenarios) AppendScenarioLog(context.Context, string, string, port.ScenarioLogEntry) error {
 	return nil
+}
+
+func (s *StubScenarios) RunNow(_ context.Context, serial string, scenarioIDs []string) (map[string]any, error) {
+	results := make([]map[string]any, 0, len(scenarioIDs))
+	for _, id := range scenarioIDs {
+		results = append(results, map[string]any{
+			"scenario_id": id,
+			"status":      "skipped",
+			"error":       "stub mode",
+		})
+	}
+	return map[string]any{"serial": serial, "results": results}, nil
 }
 
 func (s *StubScenarios) Ping(context.Context) error { return nil }

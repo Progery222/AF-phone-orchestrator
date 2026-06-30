@@ -188,6 +188,7 @@ func (r *ScenarioRunner) actionCloseApp(ctx context.Context, req ScenarioStepReq
 		if _, err := r.executor.Key(ctx, req.Serial, "home"); err != nil {
 			return ScenarioStepResult{}, err
 		}
+		r.appendStepLog(ctx, req, "close_app", "closed", "force-stop + home: "+pkg)
 		return ScenarioStepResult{Status: "completed", Message: "force-stop + home: " + pkg}, nil
 	}
 	return r.closeAppViaKeys(ctx, req.Serial)
@@ -277,6 +278,14 @@ func (r *ScenarioRunner) actionWarmupFeed(
 		r.appendWarmupLog(ctx, req, "swipe_done", fmt.Sprintf(
 			"#%d ok feed_after=%q outcome=%s observed=%v", swipeN, feedAfter, outcome, observed,
 		))
+		if isForeignAppMarker(feedAfter) || (!observed && feedAfter == "") {
+			r.appendWarmupLog(ctx, req, "left_app", feedAfter)
+			if r.relaunchTikTokPackage(ctx, req.Serial, tiktokPackageFromScenario(req)) {
+				r.appendWarmupLog(ctx, req, "relaunch_tiktok", tiktokPackageFromScenario(req))
+				feedBefore = r.captureFeedMarker(ctx, req.Serial)
+				unchangedStreak = 0
+			}
+		}
 		switch outcome {
 		case "unchanged":
 			unchangedStreak++
@@ -773,6 +782,14 @@ func (r *ScenarioRunner) actionSocialAction(ctx context.Context, req ScenarioSte
 		if err := sleepCtx(ctx, 3*time.Second); err != nil {
 			return ScenarioStepResult{}, err
 		}
+	}
+	if behavior == "search-feed" && network == "tiktok" {
+		pkg := tiktokPackageFromScenario(req)
+		r.appendStepLog(ctx, req, "social_action", "relaunch_tiktok", pkg)
+		if !r.relaunchTikTokPackage(ctx, req.Serial, pkg) {
+			r.appendStepLog(ctx, req, "social_action", "relaunch_failed", pkg)
+		}
+		_ = sleepCtx(ctx, 2*time.Second)
 	}
 	// Быстрый снимок — не блокировать поиск на 30+ с пока observer занят после warmup.
 	if behavior == "search-feed" {

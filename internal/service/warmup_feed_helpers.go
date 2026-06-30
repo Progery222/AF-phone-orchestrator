@@ -163,3 +163,45 @@ func (r *ScenarioRunner) observerReady(ctx context.Context, serial string) bool 
 	_, err := r.observer.DumpUI(reqCtx, serial)
 	return err == nil
 }
+
+// isForeignAppMarker — лента ушла из TikTok (Chrome/Gmail/лаунчер).
+func isForeignAppMarker(marker string) bool {
+	low := strings.ToLower(strings.TrimSpace(marker))
+	if low == "" {
+		return false
+	}
+	for _, hint := range []string{
+		"gmail", "chrome", "google", "launcher", "recent apps",
+		"settings", "page 1 of", "новая вкладка", "new tab",
+	} {
+		if strings.Contains(low, hint) {
+			return true
+		}
+	}
+	return false
+}
+
+func tiktokPackageFromScenario(req ScenarioStepRequest) string {
+	if p := strings.TrimSpace(req.Params["package"]); p != "" {
+		return p
+	}
+	if strings.Contains(req.ScenarioYAML, "com.ss.android.ugc.trill") {
+		return "com.ss.android.ugc.trill"
+	}
+	return "com.zhiliaoapp.musically"
+}
+
+func (r *ScenarioRunner) relaunchTikTokPackage(ctx context.Context, serial, pkg string) bool {
+	if pkg == "" {
+		pkg = "com.zhiliaoapp.musically"
+	}
+	if _, err := r.executor.Key(ctx, serial, "home"); err != nil {
+		return false
+	}
+	_ = sleepCtx(ctx, 500*time.Millisecond)
+	if err := r.executor.LaunchPackage(ctx, serial, pkg); err != nil {
+		return false
+	}
+	_ = sleepCtx(ctx, 2500*time.Millisecond)
+	return true
+}

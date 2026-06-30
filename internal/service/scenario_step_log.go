@@ -85,12 +85,23 @@ func behaviorJobSuccess(status string) bool {
 	}
 }
 
+func behaviorJobPhase(result map[string]interface{}) string {
+	if result == nil {
+		return ""
+	}
+	v, _ := result["phase"].(string)
+	return strings.TrimSpace(v)
+}
+
 // waitBehaviorJobWithLogs — опрос job с записью статусов в scenarios log.
 func (r *ScenarioRunner) waitBehaviorJobWithLogs(
 	ctx context.Context, req ScenarioStepRequest, action, jobID string, timeout time.Duration,
 ) (port.BehaviorJob, error) {
 	deadline := time.Now().Add(timeout)
 	lastStatus := ""
+	lastPhase := ""
+	waitingSince := time.Now()
+	lastHeartbeat := time.Now()
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
 
@@ -103,6 +114,21 @@ func (r *ScenarioRunner) waitBehaviorJobWithLogs(
 		if job.Status != lastStatus {
 			r.appendStepLog(ctx, req, action, "job_"+strings.ToLower(job.Status), fmt.Sprintf("job=%s", jobID))
 			lastStatus = job.Status
+		}
+		if phase := behaviorJobPhase(job.Result); phase != "" && phase != lastPhase {
+			r.appendStepLog(ctx, req, action, "job_phase", fmt.Sprintf("job=%s phase=%s", jobID, phase))
+			lastPhase = phase
+		}
+		if !behaviorJobTerminal(job.Status) && time.Since(lastHeartbeat) >= 15*time.Second {
+			elapsed := int(time.Since(waitingSince).Seconds())
+			phase := behaviorJobPhase(job.Result)
+			if phase == "" {
+				phase = "unknown"
+			}
+			r.appendStepLog(ctx, req, action, "job_heartbeat", fmt.Sprintf(
+				"job=%s status=%s phase=%s elapsed=%ds", jobID, job.Status, phase, elapsed,
+			))
+			lastHeartbeat = time.Now()
 		}
 		if behaviorJobTerminal(job.Status) {
 			if behaviorJobSuccess(job.Status) {
