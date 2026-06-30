@@ -63,7 +63,7 @@ func (o *ObserverHTTP) CaptureScreen(ctx context.Context, serial string) (domain
 }
 
 func (o *ObserverHTTP) DumpUI(ctx context.Context, serial string) (domain.UIDump, error) {
-	url := fmt.Sprintf("%s/ui/%s?format=xml&timeout_sec=30", o.baseURL, serial)
+	url := fmt.Sprintf("%s/ui/%s?format=xml&timeout_sec=15", o.baseURL, serial)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return domain.UIDump{}, err

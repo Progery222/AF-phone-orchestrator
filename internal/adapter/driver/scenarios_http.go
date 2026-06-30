@@ -202,6 +202,25 @@ func (c *ScenariosHTTP) Validate(ctx context.Context, serial, scenarioYAML, vari
 	return out, nil
 }
 
+func (c *ScenariosHTTP) AppendScenarioLog(ctx context.Context, serial, scenarioID string, entry port.ScenarioLogEntry) error {
+	body, _ := json.Marshal(entry)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/scenarios/"+serial+"/"+scenarioID+"/log", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("scenarios log POST HTTP %d: %s", resp.StatusCode, string(b))
+	}
+	return nil
+}
+
 func (c *ScenariosHTTP) Ping(ctx context.Context) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.healthURL+"/health", nil)
 	if err != nil {
@@ -285,6 +304,10 @@ func (s *StubScenarios) GenerateFull(_ context.Context, serial, prompt string) (
 
 func (s *StubScenarios) Validate(_ context.Context, serial, scenarioYAML, variablesYAML string, normalize bool) (map[string]any, error) {
 	return map[string]any{"valid": true, "warnings": []string{"stub mode"}}, nil
+}
+
+func (s *StubScenarios) AppendScenarioLog(context.Context, string, string, port.ScenarioLogEntry) error {
+	return nil
 }
 
 func (s *StubScenarios) Ping(context.Context) error { return nil }

@@ -453,15 +453,20 @@ func (h *PhonesHTTP) executorType(w http.ResponseWriter, r *http.Request, serial
 		return
 	}
 	var body struct {
-		Text string `json:"text"`
+		Text  string `json:"text"`
+		Typos *bool  `json:"typos"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.Text) == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "укажите text в JSON"})
 		return
 	}
+	typos := true
+	if body.Typos != nil {
+		typos = *body.Typos
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	res, err := h.executor.TypeText(ctx, serial, body.Text)
+	res, err := h.executor.TypeText(ctx, serial, body.Text, typos)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return

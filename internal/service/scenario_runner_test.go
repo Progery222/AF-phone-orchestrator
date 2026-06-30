@@ -27,6 +27,7 @@ func TestScenarioRunner_Wait(t *testing.T) {
 		driver.NewStubScenarios(),
 		driver.NewStubBehavior(),
 		store,
+		nil,
 		testLogger{},
 	)
 	res, err := runner.RunStep(context.Background(), ScenarioStepRequest{
@@ -52,6 +53,7 @@ func TestScenarioRunner_OpenApp(t *testing.T) {
 		driver.NewStubScenarios(),
 		driver.NewStubBehavior(),
 		store,
+		nil,
 		testLogger{},
 	)
 	_, err := runner.RunStep(context.Background(), ScenarioStepRequest{

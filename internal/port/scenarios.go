@@ -33,6 +33,18 @@ type ScenarioStatus struct {
 	Timezone    string   `json:"timezone,omitempty"`
 }
 
+// ScenarioLogEntry — промежуточная запись в JSONL (свайпы warmup_feed и т.п.).
+type ScenarioLogEntry struct {
+	TS     string `json:"ts,omitempty"`
+	MSK    string `json:"msk,omitempty"`
+	StepID string `json:"step_id,omitempty"`
+	Status string `json:"status"`
+	Action string `json:"action,omitempty"`
+	Event  string `json:"event,omitempty"`
+	Detail string `json:"detail,omitempty"`
+	Error  string `json:"error,omitempty"`
+}
+
 type ScenariosClient interface {
 	ListForSerial(ctx context.Context, serial string) (ScenarioListResult, error)
 	SetActiveScenario(ctx context.Context, serial, scenarioID string) error
@@ -44,5 +56,6 @@ type ScenariosClient interface {
 	Generate(ctx context.Context, serial, prompt string) (ScenarioFiles, []string, error)
 	GenerateFull(ctx context.Context, serial, prompt string) (map[string]any, error)
 	Validate(ctx context.Context, serial, scenarioYAML, variablesYAML string, normalize bool) (map[string]any, error)
+	AppendScenarioLog(ctx context.Context, serial, scenarioID string, entry ScenarioLogEntry) error
 	Ping(ctx context.Context) error
 }

@@ -168,6 +168,35 @@ func TestScenarios_E2E(t *testing.T) {
 		}
 	})
 
+	t.Run("scenario_run_step_warmup", func(t *testing.T) {
+		serial := "TEST-PHONE-001"
+		body := map[string]any{
+			"scenario_id": "warmup-test",
+			"step_id":     "scroll",
+			"action":      "warmup_feed",
+			"params":      map[string]string{"duration_sec": "3"},
+			"scenario_yaml": `id: warmup-test
+serial: TEST-PHONE-001
+steps:
+  - id: scroll
+    action: warmup_feed
+    params:
+      duration_sec: "3"
+`,
+			"variables_yaml": `warmup_feed:
+  scroll_interval_sec: [1, 1]
+  view_duration_sec: [1, 1]
+  swipe_pause_ms: [50, 50]
+`,
+		}
+		resp := env.postJSON(t, "/phones/"+serial+"/scenarios/run-step", body, http.StatusOK)
+		var out map[string]any
+		_ = json.NewDecoder(resp.Body).Decode(&out)
+		if out["status"] != "completed" {
+			t.Fatalf("warmup run-step: %v", out)
+		}
+	})
+
 	t.Run("debug_recovery_run", func(t *testing.T) {
 		body := map[string]string{
 			"serial":   "TEST-PHONE-001",
@@ -207,7 +236,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	)
 	phones := service.NewPhoneService(store)
 	orchHandler := handler.NewOrchestratorHandler(flow, log)
-	phonesHTTP := handler.NewPhonesHTTP(phones, orch, driver.NewStubConnector(), observer, executor, driver.NewStubContent(), driver.NewStubContacts(), driver.NewStubVideo(), driver.NewStubScenarios(), nil)
+	phonesHTTP := handler.NewPhonesHTTP(phones, orch, driver.NewStubConnector(), observer, executor, driver.NewStubContent(), driver.NewStubContacts(), driver.NewStubVideo(), driver.NewStubScenarios(), service.NewScenarioRunner(executor, observer, driver.NewStubVideo(), driver.NewStubContent(), driver.NewStubScenarios(), driver.NewStubBehavior(), store, flow, log))
 
 	mux := handler.NewHealthHandler(handler.HealthDeps{
 		Observer: observer, Recovery: recovery, Executor: executor, Connector: driver.NewStubConnector(),

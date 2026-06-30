@@ -63,12 +63,12 @@ func (e *ExecutorGRPC) Swipe(ctx context.Context, serial string, x0, y0, x1, y1 
 	return fromProtoResult(res), resultError(res)
 }
 
-func (e *ExecutorGRPC) TypeText(ctx context.Context, serial string, text string) (domain.ExecutorActionResult, error) {
+func (e *ExecutorGRPC) TypeText(ctx context.Context, serial string, text string, typos bool) (domain.ExecutorActionResult, error) {
 	res, err := e.client.TypeText(ctx, &executorv1.TypeTextRequest{
 		IdempotencyKey: idempotencyKey(serial, "type"),
 		Serial:         serial,
 		Text:           text,
-		Typos:          true,
+		Typos:          typos,
 		Lang:           "auto",
 	})
 	if err != nil {

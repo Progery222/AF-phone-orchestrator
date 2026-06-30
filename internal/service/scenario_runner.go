@@ -51,6 +51,7 @@ type ScenarioRunner struct {
 	scenarios port.ScenariosClient
 	behavior  port.BehaviorClient
 	phones    port.PhoneStore
+	recovery  *RecoveryFlowService
 	log       port.Logger
 }
 
@@ -62,11 +63,12 @@ func NewScenarioRunner(
 	scenarios port.ScenariosClient,
 	behavior port.BehaviorClient,
 	phones port.PhoneStore,
+	recovery *RecoveryFlowService,
 	log port.Logger,
 ) *ScenarioRunner {
 	return &ScenarioRunner{
 		executor: executor, observer: observer, video: video, content: content,
-		scenarios: scenarios, behavior: behavior, phones: phones, log: log,
+		scenarios: scenarios, behavior: behavior, phones: phones, recovery: recovery, log: log,
 	}
 }
 
@@ -164,6 +166,14 @@ func (r *ScenarioRunner) actionOpenApp(ctx context.Context, req ScenarioStepRequ
 		return ScenarioStepResult{}, err
 	}
 	time.Sleep(2 * time.Second)
+	if r.recovery != nil && r.observer != nil {
+		if ui, err := r.observer.DumpUI(ctx, req.Serial); err == nil && isPermissionDialog(ui.XMLDump) {
+			r.log.Info("scenario open_app: permission dialog, recovery", "serial", req.Serial, "step", req.StepID)
+			r.appendStepLog(ctx, req, "open_app", "recovery_attempt", "permission dialog after launch")
+			_, _ = r.recovery.RunRecovery(ctx, req.Serial, "permission dialog after open_app", req.StepID)
+		}
+	}
+	r.logObserverSnapshot(ctx, req, "open_app", "after_launch")
 	return ScenarioStepResult{Status: "completed", Message: "app launched: " + pkg}, nil
 }
 
@@ -213,39 +223,79 @@ func (r *ScenarioRunner) actionWarmupFeed(
 		durationSec = d
 	}
 
-	deadline := time.Now().Add(time.Duration(durationSec) * time.Second)
-	if until != "" {
-		if t, err := time.Parse("15:04", until); err == nil {
-			now := time.Now()
-			untilTime := time.Date(now.Year(), now.Month(), now.Day(), t.Hour(), t.Minute(), 0, 0, now.Location())
-			if untilTime.After(now) {
-				deadline = untilTime
-			}
-		}
-	}
-
 	likesMax := pickRange(rng, feedVars["likes_max"], 0)
 	likesDone := 0
 	likeProb := pickFloatRange(rng, feedVars["like_probability"], 0)
 	likesEnabled := likesMax > 0 && likeProb > 0
 
-	w, h := portraitSize(phone.ScreenResX, phone.ScreenResY)
+	now := time.Now()
+	deadline := warmupFeedDeadline(now, durationSec, until)
+	w, h := r.resolveFeedScreenSize(ctx, req.Serial, phone)
 	swipes := 0
+	centerSwipe := strings.EqualFold(strings.TrimSpace(req.Params["network"]), "instagram") ||
+		strings.Contains(strings.ToLower(req.StepID), "instagram")
+
+	r.log.Info("warmup_feed start", "serial", req.Serial, "step", req.StepID,
+		"screen", fmt.Sprintf("%dx%d", w, h), "duration_sec", durationSec, "until", until,
+		"deadline_sec", int(deadline.Sub(now).Seconds()))
+
+	if err := sleepCtx(ctx, 2*time.Second); err != nil {
+		return ScenarioStepResult{}, err
+	}
 
 	// Первое видео после open_app — короткий просмотр перед свайпами.
 	if err := sleepCtx(ctx, time.Duration(pickRange(rng, feedVars["initial_view_sec"], 3))*time.Second); err != nil {
 		return ScenarioStepResult{}, err
 	}
 
+	feedBefore := r.captureFeedMarker(ctx, req.Serial)
+	unchangedStreak := 0
+
 	for time.Now().Before(deadline) {
 		if err := ctx.Err(); err != nil {
 			return ScenarioStepResult{}, err
 		}
 
-		if err := r.tiktokFeedSwipeUp(ctx, req.Serial, w, h); err != nil {
+		swipeN := swipes + 1
+		x0, y0, x1, y1 := feedSwipeCoordsFor(w, h, centerSwipe)
+		r.appendWarmupLog(ctx, req, "swipe_attempt", fmt.Sprintf(
+			"#%d coords (%d,%d)→(%d,%d) screen=%dx%d feed=%q",
+			swipeN, x0, y0, x1, y1, w, h, feedBefore,
+		))
+
+		if err := r.feedSwipeOnce(ctx, req.Serial, x0, y0, x1, y1); err != nil {
+			r.appendWarmupLog(ctx, req, "swipe_failed", fmt.Sprintf("#%d err=%v", swipeN, err))
 			return ScenarioStepResult{}, err
 		}
 		swipes++
+
+		if err := sleepCtx(ctx, 1200*time.Millisecond); err != nil {
+			return ScenarioStepResult{}, err
+		}
+		feedAfter, observed := r.captureFeedMarkerReliable(ctx, req.Serial, 3)
+		outcome := feedSwipeOutcome(feedBefore, feedAfter)
+		r.appendWarmupLog(ctx, req, "swipe_done", fmt.Sprintf(
+			"#%d ok feed_after=%q outcome=%s observed=%v", swipeN, feedAfter, outcome, observed,
+		))
+		switch outcome {
+		case "unchanged":
+			unchangedStreak++
+		case "changed":
+			unchangedStreak = 0
+			feedBefore = feedAfter
+		default: // unknown — observer не подтвердил смену, не считаем застреванием
+			if observed && feedAfter != "" {
+				feedBefore = feedAfter
+			}
+		}
+		if unchangedStreak >= 2 {
+			if r.tryRecoverBlockedFeed(ctx, req, feedBefore, w, h, centerSwipe) {
+				unchangedStreak = 0
+				if m, ok := r.captureFeedMarkerReliable(ctx, req.Serial, 2); ok {
+					feedBefore = m
+				}
+			}
+		}
 
 		watchSec := pickRange(rng, feedVars["scroll_interval_sec"], 0)
 		if watchSec <= 0 {
@@ -284,25 +334,71 @@ func (r *ScenarioRunner) actionWarmupFeed(
 	}, nil
 }
 
-// tiktokFeedSwipeUp — два медленных свайпа по ленте (как в Controls / tg-bot).
-func (r *ScenarioRunner) tiktokFeedSwipeUp(ctx context.Context, serial string, w, h int32) error {
-	x0, y0, x1, y1 := tiktokFeedSwipeCoords(w, h)
-	for i := 0; i < 2; i++ {
-		if _, err := r.executor.Swipe(ctx, serial, x0, y0, x1, y1); err != nil {
-			return err
+func (r *ScenarioRunner) tryRecoverBlockedFeed(ctx context.Context, req ScenarioStepRequest, feedMarker string, w, h int32, centerSwipe bool) bool {
+	if r.observer != nil {
+		reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		ui, err := r.observer.DumpUI(reqCtx, req.Serial)
+		cancel()
+		if err == nil && isPermissionDialog(ui.XMLDump) {
+			r.appendWarmupLog(ctx, req, "recovery_attempt", "permission dialog on feed")
+		} else {
+			r.appendWarmupLog(ctx, req, "recovery_attempt", "feed unchanged after swipes")
 		}
-		if i == 0 {
-			if err := sleepCtx(ctx, 350*time.Millisecond); err != nil {
-				return err
-			}
-		}
+	} else {
+		r.appendWarmupLog(ctx, req, "recovery_attempt", "feed unchanged after swipes")
 	}
+
+	if r.recovery != nil && r.observerReady(ctx, req.Serial) {
+		plan, err := r.recovery.RunRecovery(ctx, req.Serial, "feed blocked during scenario warmup", req.StepID+": "+feedMarker)
+		if err != nil {
+			r.appendWarmupLog(ctx, req, "recovery_failed", err.Error())
+		} else {
+			r.appendWarmupLog(ctx, req, "recovery_done", plan.Message)
+			return true
+		}
+	} else if r.recovery == nil {
+		r.appendWarmupLog(ctx, req, "recovery_skip", "recovery service not configured")
+	} else {
+		r.appendWarmupLog(ctx, req, "recovery_skip", "observer unavailable for recovery")
+	}
+
+	r.feedStuckFallback(ctx, req.Serial, w, h, centerSwipe)
+	r.appendWarmupLog(ctx, req, "recovery_fallback", "double swipe + wait")
+	return true
+}
+
+func (r *ScenarioRunner) feedStuckFallback(ctx context.Context, serial string, w, h int32, centerSwipe bool) {
+	x0, y0, x1, y1 := feedSwipeCoordsFor(w, h, centerSwipe)
+	_ = r.feedSwipeOnce(ctx, serial, x0, y0, x1, y1)
+	_ = sleepCtx(ctx, 400*time.Millisecond)
+	_ = r.feedSwipeOnce(ctx, serial, x0, y0, x1, y1)
+	_ = sleepCtx(ctx, 2*time.Second)
+}
+
+func (r *ScenarioRunner) feedSwipeOnce(ctx context.Context, serial string, x0, y0, x1, y1 int32) error {
+	res, err := r.executor.Swipe(ctx, serial, x0, y0, x1, y1)
+	if err != nil {
+		return err
+	}
+	r.log.Info("warmup swipe", "serial", serial, "coords", fmt.Sprintf("%d,%d→%d,%d", x0, y0, x1, y1),
+		"status", res.Status, "msg", res.Message)
 	return nil
 }
 
+func (r *ScenarioRunner) appendWarmupLog(ctx context.Context, req ScenarioStepRequest, event, detail string) {
+	r.appendStepLog(ctx, req, "warmup_feed", event, detail)
+}
+
+func feedSwipeCoordsFor(w, h int32, center bool) (int32, int32, int32, int32) {
+	if center {
+		return scaleSwipe(refScreenW/2, refScreenH*1650/1920, refScreenW/2, refScreenH*450/1920, w, h)
+	}
+	return tiktokFeedSwipeCoords(w, h)
+}
+
 func tiktokFeedSwipeCoords(w, h int32) (int32, int32, int32, int32) {
-	// Координаты как feedGestures (1080×1920): центр-лево ленты, мимо кнопок справа.
-	return scaleSwipe(refScreenW*480/1080, refScreenH*1650/1920, refScreenW*480/1080, refScreenH*450/1920, w, h)
+	// Как tg-bot / Controls: центр экрана, свайп вверх.
+	return scaleSwipe(refScreenW/2, refScreenH*1650/1920, refScreenW/2, refScreenH*450/1920, w, h)
 }
 
 func (r *ScenarioRunner) actionBrowserResearch(
@@ -350,7 +446,7 @@ func (r *ScenarioRunner) actionBrowserResearch(
 		return ScenarioStepResult{}, err
 	}
 	time.Sleep(800 * time.Millisecond)
-	if _, err := r.executor.TypeText(ctx, req.Serial, searchURL); err != nil {
+	if _, err := r.executor.TypeText(ctx, req.Serial, searchURL, true); err != nil {
 		return ScenarioStepResult{}, err
 	}
 	time.Sleep(500 * time.Millisecond)
@@ -673,21 +769,38 @@ func (r *ScenarioRunner) actionSocialAction(ctx context.Context, req ScenarioSte
 		if _, ok := body["skip_launch"]; !ok {
 			body["skip_launch"] = true
 		}
+		r.appendStepLog(ctx, req, "social_action", "observer_cooldown", "wait 3s after warmup")
+		if err := sleepCtx(ctx, 3*time.Second); err != nil {
+			return ScenarioStepResult{}, err
+		}
 	}
+	// Быстрый снимок — не блокировать поиск на 30+ с пока observer занят после warmup.
+	if behavior == "search-feed" {
+		r.logObserverSnapshotN(ctx, req, "social_action", "before", 1)
+	} else {
+		r.logObserverSnapshot(ctx, req, "social_action", "before")
+	}
+	r.appendStepLog(ctx, req, "social_action", "job_submit", fmt.Sprintf(
+		"network=%s behavior=%s query=%v count=%v skip_launch=%v",
+		network, behavior, body["query"], body["count"], body["skip_launch"],
+	))
 	job, err := r.behavior.RunSocialAction(ctx, network, behavior, req.Serial, body)
 	if err != nil {
+		r.appendStepLog(ctx, req, "social_action", "job_submit_failed", err.Error())
 		return ScenarioStepResult{}, err
 	}
+	r.appendStepLog(ctx, req, "social_action", "job_started", fmt.Sprintf("job=%s", job.ID))
 	timeout := 10 * time.Minute
 	if ds := req.Params["duration_sec"]; ds != "" {
 		if n, err := strconv.Atoi(ds); err == nil && n > 0 {
 			timeout = time.Duration(n+90) * time.Second
 		}
 	}
-	final, err := r.behavior.WaitJob(ctx, job.ID, timeout)
+	final, err := r.waitBehaviorJobWithLogs(ctx, req, "social_action", job.ID, timeout)
 	if err != nil {
 		return ScenarioStepResult{Status: "failed", Error: err.Error()}, err
 	}
+	r.logObserverSnapshot(ctx, req, "social_action", "after")
 	return ScenarioStepResult{
 		Status:  "completed",
 		Message: fmt.Sprintf("social %s/%s job=%s", network, behavior, final.ID),

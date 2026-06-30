@@ -29,7 +29,7 @@ type ExecutorClient interface {
 	ExecutePlan(ctx context.Context, serial string, steps []domain.SolutionStep) error
 	Tap(ctx context.Context, serial string, x, y int32) (domain.ExecutorActionResult, error)
 	Swipe(ctx context.Context, serial string, x0, y0, x1, y1 int32) (domain.ExecutorActionResult, error)
-	TypeText(ctx context.Context, serial string, text string) (domain.ExecutorActionResult, error)
+	TypeText(ctx context.Context, serial string, text string, typos bool) (domain.ExecutorActionResult, error)
 	Key(ctx context.Context, serial string, key string) (domain.ExecutorActionResult, error)
 	LaunchPackage(ctx context.Context, serial, packageName string) error
 	ForceStopPackage(ctx context.Context, serial, packageName string) error

@@ -30,7 +30,7 @@ func (s *StubExecutor) Swipe(_ context.Context, serial string, x0, y0, x1, y1 in
 	}, nil
 }
 
-func (s *StubExecutor) TypeText(_ context.Context, serial string, text string) (domain.ExecutorActionResult, error) {
+func (s *StubExecutor) TypeText(_ context.Context, serial string, text string, _ bool) (domain.ExecutorActionResult, error) {
 	return domain.ExecutorActionResult{
 		Action: "type_text", Status: "ok", Message: "stub",
 	}, nil
