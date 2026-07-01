@@ -22,7 +22,7 @@ type BehaviorHTTP struct {
 func NewBehaviorHTTP(cfg config.Config) *BehaviorHTTP {
 	return &BehaviorHTTP{
 		baseURL: strings.TrimRight(cfg.BehaviorHTTPURL, "/"),
-		client:  &http.Client{Timeout: 30 * time.Second},
+		client:  &http.Client{Timeout: 90 * time.Second},
 	}
 }
 

@@ -808,6 +808,21 @@ func (r *ScenarioRunner) actionSocialAction(ctx context.Context, req ScenarioSte
 	}
 	r.appendStepLog(ctx, req, "social_action", "job_started", fmt.Sprintf("job=%s", job.ID))
 	timeout := 10 * time.Minute
+	if countRaw, ok := body["count"]; ok {
+		switch n := countRaw.(type) {
+		case int:
+			if n > 0 {
+				timeout = time.Duration(n*25+120) * time.Second
+			}
+		case float64:
+			if n > 0 {
+				timeout = time.Duration(int(n)*25+120) * time.Second
+			}
+		}
+		if timeout > 20*time.Minute {
+			timeout = 20 * time.Minute
+		}
+	}
 	if ds := req.Params["duration_sec"]; ds != "" {
 		if n, err := strconv.Atoi(ds); err == nil && n > 0 {
 			timeout = time.Duration(n+90) * time.Second

@@ -412,7 +412,7 @@ func (h *PhonesHTTP) executorTap(w http.ResponseWriter, r *http.Request, serial 
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "укажите x и y в JSON"})
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
 	defer cancel()
 	res, err := h.executor.Tap(ctx, serial, body.X, body.Y)
 	if err != nil {
@@ -437,7 +437,7 @@ func (h *PhonesHTTP) executorSwipe(w http.ResponseWriter, r *http.Request, seria
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "укажите x0,y0,x1,y1 в JSON"})
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
 	defer cancel()
 	res, err := h.executor.Swipe(ctx, serial, body.X0, body.Y0, body.X1, body.Y1)
 	if err != nil {
