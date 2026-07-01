@@ -205,3 +205,15 @@ func (r *ScenarioRunner) relaunchTikTokPackage(ctx context.Context, serial, pkg 
 	_ = sleepCtx(ctx, 2500*time.Millisecond)
 	return true
 }
+
+// ensureTikTokForeground — вернуть TikTok на передний план без Home (цепочка после warmup).
+func (r *ScenarioRunner) ensureTikTokForeground(ctx context.Context, serial, pkg string) bool {
+	if pkg == "" {
+		pkg = "com.zhiliaoapp.musically"
+	}
+	if err := r.executor.LaunchPackage(ctx, serial, pkg); err != nil {
+		return false
+	}
+	_ = sleepCtx(ctx, 1500*time.Millisecond)
+	return true
+}

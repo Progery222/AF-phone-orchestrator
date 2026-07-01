@@ -117,6 +117,8 @@ func (r *ScenarioRunner) RunStep(ctx context.Context, req ScenarioStepRequest) (
 		result, err = r.actionSocialAction(ctx, req)
 	case "custom_execute":
 		result, err = r.actionCustomExecute(ctx, req)
+	case "device_control":
+		result, err = r.actionDeviceControl(ctx, req)
 	default:
 		err = fmt.Errorf("неизвестное действие: %s", req.Action)
 		result = ScenarioStepResult{Status: "failed", Error: err.Error()}
@@ -770,6 +772,8 @@ func (r *ScenarioRunner) actionSocialAction(ctx context.Context, req ScenarioSte
 			}
 		case "skip_launch":
 			body["skip_launch"] = strings.EqualFold(v, "true") || v == "1" || strings.EqualFold(v, "yes")
+		case "open_first_only":
+			body["open_first_only"] = strings.EqualFold(v, "true") || v == "1" || strings.EqualFold(v, "yes")
 		default:
 			body[k] = v
 		}
@@ -785,9 +789,17 @@ func (r *ScenarioRunner) actionSocialAction(ctx context.Context, req ScenarioSte
 	}
 	if behavior == "search-feed" && network == "tiktok" {
 		pkg := tiktokPackageFromScenario(req)
-		r.appendStepLog(ctx, req, "social_action", "relaunch_tiktok", pkg)
-		if !r.relaunchTikTokPackage(ctx, req.Serial, pkg) {
-			r.appendStepLog(ctx, req, "social_action", "relaunch_failed", pkg)
+		skipLaunch, _ := body["skip_launch"].(bool)
+		if skipLaunch {
+			r.appendStepLog(ctx, req, "social_action", "ensure_tiktok_foreground", pkg)
+			if !r.ensureTikTokForeground(ctx, req.Serial, pkg) {
+				r.appendStepLog(ctx, req, "social_action", "ensure_foreground_failed", pkg)
+			}
+		} else {
+			r.appendStepLog(ctx, req, "social_action", "relaunch_tiktok", pkg)
+			if !r.relaunchTikTokPackage(ctx, req.Serial, pkg) {
+				r.appendStepLog(ctx, req, "social_action", "relaunch_failed", pkg)
+			}
 		}
 		_ = sleepCtx(ctx, 2*time.Second)
 	}
@@ -837,6 +849,67 @@ func (r *ScenarioRunner) actionSocialAction(ctx context.Context, req ScenarioSte
 		Status:  "completed",
 		Message: fmt.Sprintf("social %s/%s job=%s", network, behavior, final.ID),
 	}, nil
+}
+
+func (r *ScenarioRunner) actionDeviceControl(ctx context.Context, req ScenarioStepRequest) (ScenarioStepResult, error) {
+	kind := strings.TrimSpace(req.Params["kind"])
+	if kind == "" {
+		return ScenarioStepResult{}, fmt.Errorf("params.kind обязателен")
+	}
+	phone, _ := r.phones.Get(ctx, req.Serial)
+	w, h := portraitSize(phone.ScreenResX, phone.ScreenResY)
+
+	switch kind {
+	case "home", "back", "recents", "power":
+		if _, err := r.executor.Key(ctx, req.Serial, kind); err != nil {
+			return ScenarioStepResult{}, err
+		}
+		return ScenarioStepResult{Status: "completed", Message: "key: " + kind}, nil
+	case "swipe_up", "swipe_down", "swipe_left", "swipe_right":
+		x0, y0, x1, y1 := controlSwipeCoords(kind, w, h)
+		if err := r.feedSwipeOnce(ctx, req.Serial, x0, y0, x1, y1); err != nil {
+			return ScenarioStepResult{}, err
+		}
+		return ScenarioStepResult{Status: "completed", Message: kind}, nil
+	case "tap_center":
+		x, y := scalePoint(refScreenW/2, refScreenH*960/1920, w, h)
+		if _, err := r.executor.Tap(ctx, req.Serial, x, y); err != nil {
+			return ScenarioStepResult{}, err
+		}
+		return ScenarioStepResult{Status: "completed", Message: "tap center"}, nil
+	case "tap_custom":
+		refX, _ := strconv.Atoi(strings.TrimSpace(req.Params["ref_x"]))
+		refY, _ := strconv.Atoi(strings.TrimSpace(req.Params["ref_y"]))
+		if refX <= 0 {
+			refX = refScreenW / 2
+		}
+		if refY <= 0 {
+			refY = refScreenH * 960 / 1920
+		}
+		x, y := scalePoint(refX, refY, w, h)
+		if _, err := r.executor.Tap(ctx, req.Serial, x, y); err != nil {
+			return ScenarioStepResult{}, err
+		}
+		return ScenarioStepResult{
+			Status:  "completed",
+			Message: fmt.Sprintf("tap (%d,%d) ref", refX, refY),
+		}, nil
+	default:
+		return ScenarioStepResult{}, fmt.Errorf("неизвестный device_control kind: %s", kind)
+	}
+}
+
+func controlSwipeCoords(kind string, w, h int32) (int32, int32, int32, int32) {
+	switch kind {
+	case "swipe_down":
+		return scaleSwipe(refScreenW/2, refScreenH*450/1920, refScreenW/2, refScreenH*1650/1920, w, h)
+	case "swipe_left":
+		return scaleSwipe(refScreenW*900/1080, refScreenH/2, refScreenW*180/1080, refScreenH/2, w, h)
+	case "swipe_right":
+		return scaleSwipe(refScreenW*180/1080, refScreenH/2, refScreenW*900/1080, refScreenH/2, w, h)
+	default: // swipe_up
+		return scaleSwipe(refScreenW/2, refScreenH*1650/1920, refScreenW/2, refScreenH*450/1920, w, h)
+	}
 }
 
 func (r *ScenarioRunner) actionCustomExecute(ctx context.Context, req ScenarioStepRequest) (ScenarioStepResult, error) {

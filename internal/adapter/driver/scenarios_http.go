@@ -129,7 +129,7 @@ func (c *ScenariosHTTP) Generate(ctx context.Context, serial, prompt string) (po
 		return port.ScenarioFiles{}, nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := c.client.Do(req)
+	resp, err := c.longClient().Do(req)
 	if err != nil {
 		return port.ScenarioFiles{}, nil, err
 	}
@@ -150,6 +150,10 @@ func (c *ScenariosHTTP) Generate(ctx context.Context, serial, prompt string) (po
 	return port.ScenarioFiles{ScenarioYAML: out.ScenarioYAML, VariablesYAML: out.VariablesYAML}, out.Warnings, nil
 }
 
+func (c *ScenariosHTTP) longClient() *http.Client {
+	return &http.Client{Timeout: 45 * time.Minute}
+}
+
 // GenerateFull — полный ответ /scenarios/generate (warnings, step_issues).
 func (c *ScenariosHTTP) GenerateFull(ctx context.Context, serial, prompt string) (map[string]any, error) {
 	body, _ := json.Marshal(map[string]string{"serial": serial, "prompt": prompt})
@@ -158,7 +162,7 @@ func (c *ScenariosHTTP) GenerateFull(ctx context.Context, serial, prompt string)
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := c.client.Do(req)
+	resp, err := c.longClient().Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -209,8 +213,7 @@ func (c *ScenariosHTTP) RunNow(ctx context.Context, serial string, scenarioIDs [
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	longClient := &http.Client{Timeout: 45 * time.Minute}
-	resp, err := longClient.Do(req)
+	resp, err := c.longClient().Do(req)
 	if err != nil {
 		return nil, err
 	}
