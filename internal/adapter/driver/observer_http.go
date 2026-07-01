@@ -1,6 +1,7 @@
 package driver
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -90,6 +91,41 @@ func (o *ObserverHTTP) DumpUI(ctx context.Context, serial string) (domain.UIDump
 		XMLDump: parsed.XMLDump,
 		Package: parsed.PackageName,
 	}, nil
+}
+
+func (o *ObserverHTTP) DetectState(ctx context.Context, serial string) (domain.ScreenDetection, error) {
+	payload := map[string]any{
+		"serial":           serial,
+		"mode":             "vlm",
+		"platform":         "android",
+		"use_screenshot":   true,
+		"store_screenshot": true,
+		"timeout_sec":      30,
+		"priority":         "high",
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return domain.ScreenDetection{}, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.baseURL+"/detect-state", bytes.NewReader(data))
+	if err != nil {
+		return domain.ScreenDetection{}, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := o.client.Do(req)
+	if err != nil {
+		return domain.ScreenDetection{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		return domain.ScreenDetection{}, fmt.Errorf("observer detect-state HTTP %d: %s", resp.StatusCode, string(body))
+	}
+	var parsed domain.ScreenDetection
+	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+		return domain.ScreenDetection{}, err
+	}
+	return parsed, nil
 }
 
 func (o *ObserverHTTP) Ping(ctx context.Context) error {

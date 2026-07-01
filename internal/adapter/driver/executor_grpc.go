@@ -53,7 +53,10 @@ func (e *ExecutorGRPC) Swipe(ctx context.Context, serial string, x0, y0, x1, y1 
 		X1:             x1,
 		Y1:             y1,
 		Params: &executorv1.GestureParams{
-			DurationMs: 750,
+			// Быстрый флик: TikTok/Reels листают ленту по скорости отпускания.
+			// 750ms давал медленный драг — лента отпружинивала на тот же ролик.
+			// 60ms проверено на железе (720x1600 ферма): лента реально перелистывается.
+			DurationMs: 60,
 			Bezier:     true,
 		},
 	})

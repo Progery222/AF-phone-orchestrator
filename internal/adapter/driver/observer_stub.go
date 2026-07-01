@@ -29,6 +29,17 @@ func (s *StubObserver) DumpUI(_ context.Context, serial string) (domain.UIDump, 
 	}, nil
 }
 
+func (s *StubObserver) DetectState(_ context.Context, serial string) (domain.ScreenDetection, error) {
+	return domain.ScreenDetection{
+		Serial:      serial,
+		Confidence:  0.8,
+		Source:      "vlm",
+		BackendUsed: "stub",
+		Elements:    []string{"Stand 123"},
+		MinioKey:    serial + "/test.png",
+	}, nil
+}
+
 func (s *StubObserver) Ping(context.Context) error { return nil }
 
 var _ port.ObserverClient = (*StubObserver)(nil)

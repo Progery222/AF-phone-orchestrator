@@ -25,10 +25,11 @@ type PhonesHTTP struct {
 	video          port.VideoClient
 	scenarios      port.ScenariosClient
 	scenarioRunner *service.ScenarioRunner
+	standSeqSync   *service.StandSeqSyncService
 }
 
 func NewPhonesHTTP(phones *service.PhoneService, orchestrator *service.OrchestratorService, connector port.ConnectorClient, observer port.ObserverClient, executor port.ExecutorClient, content port.ContentClient, contacts port.ContactsClient, video port.VideoClient, scenarios port.ScenariosClient, scenarioRunner *service.ScenarioRunner) *PhonesHTTP {
-	return &PhonesHTTP{phones: phones, orchestrator: orchestrator, connector: connector, observer: observer, executor: executor, content: content, contacts: contacts, video: video, scenarios: scenarios, scenarioRunner: scenarioRunner}
+	return &PhonesHTTP{phones: phones, orchestrator: orchestrator, connector: connector, observer: observer, executor: executor, content: content, contacts: contacts, video: video, scenarios: scenarios, scenarioRunner: scenarioRunner, standSeqSync: service.NewStandSeqSyncService(phones, observer, executor)}
 }
 
 func (h *PhonesHTTP) Register(mux *http.ServeMux) {
@@ -93,6 +94,14 @@ func (h *PhonesHTTP) phoneBySerial(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusOK, toPhoneJSON(phone))
+		return
+	}
+	if len(parts) == 3 && parts[1] == "stand-seq" && parts[2] == "sync-from-home" {
+		if r.Method != http.MethodPost {
+			http.Error(w, "только POST", http.StatusMethodNotAllowed)
+			return
+		}
+		h.syncStandSeqFromHome(w, r, serial)
 		return
 	}
 	if len(parts) == 2 {
@@ -387,6 +396,37 @@ func (h *PhonesHTTP) observe(w http.ResponseWriter, r *http.Request, serial stri
 		"package_name": ui.Package,
 		"xml_dump":     ui.XMLDump,
 	})
+}
+
+func (h *PhonesHTTP) syncStandSeqFromHome(w http.ResponseWriter, r *http.Request, serial string) {
+	if h.standSeqSync == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "stand sequence sync не настроен"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), observerTimeout(r, 60))
+	defer cancel()
+
+	result, err := h.standSeqSync.SyncFromHome(ctx, serial)
+	if err != nil {
+		h.writeStandSeqSyncError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (h *PhonesHTTP) writeStandSeqSyncError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, domain.ErrPhoneNotFound):
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+	case errors.Is(err, domain.ErrExecutorUnavailable), errors.Is(err, domain.ErrObserverUnavailable), errors.Is(err, domain.ErrStoreUnavailable):
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+	case errors.Is(err, service.ErrStandSeqNotFound), errors.Is(err, service.ErrStandSeqAmbiguous), errors.Is(err, service.ErrStandSeqOCRUnavailable):
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
+		writeJSON(w, http.StatusGatewayTimeout, map[string]string{"error": err.Error()})
+	default:
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+	}
 }
 
 func observerTimeout(r *http.Request, defaultSec int) time.Duration {

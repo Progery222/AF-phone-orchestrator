@@ -30,6 +30,7 @@ func PublicAPIRoutes() []APIRoute {
 		{APIPublic, "http", "POST", "/phones/{serial}/resume", "phones.resume", "PhonesHTTP.phoneBySerial", "Resume a paused phone."},
 		{APIPublic, "http", "POST", "/phones/{serial}/reprovision", "phones.reprovision", "PhonesHTTP.phoneBySerial", "Reset phone to new for setup."},
 		{APIPublic, "http", "PATCH/PUT", "/phones/{serial}/stand-seq", "phones.set_stand_seq", "PhonesHTTP.phoneBySerial", "Update stand sequence number."},
+		{APIPublic, "http", "POST", "/phones/{serial}/stand-seq/sync-from-home", "phones.sync_stand_seq_from_home", "PhonesHTTP.phoneBySerial", "Read stand sequence number from the phone home screen and persist it."},
 		{APIPublic, "http", "GET", "/stats", "phones.stats", "PhonesHTTP.stats", "Read FSM counters."},
 		{APIPublic, "http", "GET", "/phones/{serial}/screen", "observer.screen", "PhonesHTTP.captureScreen", "Proxy screenshot capture."},
 		{APIPublic, "http", "GET", "/phones/{serial}/ui", "observer.ui", "PhonesHTTP.dumpUI", "Proxy UI dump."},
@@ -69,6 +70,7 @@ func PrivateAPIRoutes() []APIRoute {
 	return []APIRoute{
 		{APIPrivate, "http-out", "GET", "observer:/screen/{serial}", "observer.screen", "observer client", "Capture screenshots."},
 		{APIPrivate, "http-out", "GET", "observer:/ui/{serial}", "observer.ui", "observer client", "Dump UI XML."},
+		{APIPrivate, "http-out", "POST", "observer:/detect-state", "observer.detect_state", "observer client", "Read screenshot OCR/VLM text for stand number fallback."},
 		{APIPrivate, "grpc-out", "CALL", "executor.ExecutorService", "executor.actions", "executor client", "Run tap, swipe, key, and recovery plan actions."},
 		{APIPrivate, "grpc-out", "CALL", "connector.ConnectorService", "connector", "connector client", "Control WiFi and provision connectivity."},
 		{APIPrivate, "http-out", "POST/GET", "phone-provisioner", "provisioner", "provision client", "Start and poll provision runs."},
